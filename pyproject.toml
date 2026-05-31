@@ -1,0 +1,15 @@
+[project]
+name = "tesi-100-oos"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "polars>=1.41.2",
+    "pyarrow>=24.0.0",
+    "tqdm>=4.67.3",
+    "yfinance>=1.4.1",
+]
