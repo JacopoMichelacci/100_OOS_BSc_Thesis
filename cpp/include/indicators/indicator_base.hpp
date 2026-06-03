@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <string_view>
 #include <iostream>
+#include <cmath>
 
 #include "core/market_events.hpp"
 
@@ -30,14 +31,24 @@ public:
 
     // handle buffer operations
     // index --- works wiht negative indexing
-    const std::optional<Tout> operator[](int i) const {
-        if (buffer.size() < 1 || i > static_cast<int>(buffer.size()) - 1) { return std::nullopt; }
-        if (i == -1) { return buffer[size() - 1]; }
-        if (i < 0) { return std::nullopt; }
-        return buffer[i];
+    std::optional<Tout> operator[](int i) const {
+        if (buffer.empty()) { return std::nullopt; }
+        int buffsize = buffer.size();
+
+        if (i >= 0 && i < buffsize) {
+            return buffer[i];
+        }
+        else if (i < 0) {
+            if (-i <= buffsize) {
+                return buffer[buffsize + i];
+            }
+        }
+
+        return std::nullopt;
     }
+
     // get size
-    std::size_t size() const { return buffer.size(); }
+    int size() const { return static_cast<int>(buffer.size()); }
 
     // view buffer
     std::span<const std::optional<Tout>> view_buffer() const { return buffer; }
