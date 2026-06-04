@@ -10,6 +10,7 @@
 #include <iostream>
 
 #include "core/market_events.hpp"
+#include "utils/time.hpp"
 
 
 namespace detail {
@@ -25,28 +26,6 @@ namespace detail {
     }
 }
 
-// OBSOLETE AS WE TEMPLATE A Tin
-// struct StrategyInput {
-//     const MarketEvent* ev1 = nullptr;
-//     const MarketEvent* ev2 = nullptr;
-//     const MarketEvent* ev3 = nullptr;
-//     const MarketEvent* ev4 = nullptr;
-//     const MarketEvent* ev5 = nullptr;
-
-//     std::optional<double> d1;
-//     std::optional<double> d2;
-//     std::optional<double> d3;
-//     std::span<double> dv;
-
-//     std::optional<int> i1;
-//     std::optional<int> i2;
-//     std::optional<int> i3;
-//     std::span<int> iv;
-
-//     std::string_view str1;
-//     std::string_view str2;
-//     std::string_view str3;
-// };
 
 enum class Signal {
     SELL = -2,
@@ -57,6 +36,7 @@ enum class Signal {
 };
 
 struct StrategyConfig {
+    bool active = true;
     bool long_active = true;
     bool short_active = true;
 };
