@@ -27,6 +27,17 @@ std::ostream& operator<<(std::ostream& os, ORDER_SIDE side) {
     return os;
 }
 
+// ORDER TYPE
+std::ostream& operator<<(std::ostream& os, ORDER_TYPE type) {
+    switch (type) {
+        case (ORDER_TYPE::MARKET): {return os << "market";}
+        case (ORDER_TYPE::NONE): {return os << "none";}
+    }
+
+    return os;
+}
+
+
 // ORDER EVENT
 std::ostream& operator<<(std::ostream& os, const OrderEvent& ev) {
     os << "OrderEvent{"

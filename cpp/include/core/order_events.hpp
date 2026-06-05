@@ -21,6 +21,12 @@ enum class ORDER_SIDE {
 };
 std::ostream& operator<<(std::ostream& os, ORDER_SIDE side);
 
+enum class ORDER_TYPE {
+    MARKET,
+    NONE
+};
+std::ostream& operator<<(std::ostream& os, ORDER_TYPE type);
+
 class OrderIdGenerator {
 public:
     long long next() {
