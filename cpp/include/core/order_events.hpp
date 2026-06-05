@@ -10,12 +10,14 @@ enum class ORDER_STATUS {
     PFILLED,
     REJECTED,
     CANCELED,
+    NONE
 };
 std::ostream& operator<<(std::ostream& os, ORDER_STATUS status);
 
 enum class ORDER_SIDE {
     BUY,
     SELL,
+    NONE
 };
 std::ostream& operator<<(std::ostream& os, ORDER_SIDE side);
 
@@ -32,15 +34,12 @@ private:
 
 class OrderEvent {
 public:
-    long long ts;
-    ORDER_SIDE side;
-    std::string symbol;
-    double qty;
-    double price;
-    long long strategy_id;            // a unique identifier for a strategy; unique int given at construction 
-    long long id;
-    ORDER_STATUS status;
-
-    OrderEvent(long long ts_, ORDER_SIDE side_, std::string symbol_, double qty_, double price_, long long strategy_id_, long long id_, ORDER_STATUS status_) 
-        : ts(ts_), side(side_), symbol(std::move(symbol_)), qty(qty_), price(price_), strategy_id(strategy_id_), id(id_), status(status_) {}
+    long long ts = 0;
+    ORDER_SIDE side = ORDER_SIDE::NONE;
+    std::string symbol = "";
+    double qty = 0.0;
+    double price = 0.0;
+    long long strategy_id = -1;                 // a unique identifier for a strategy; unique int given at construction 
+    long long id = -1;                          // id of the order event
+    ORDER_STATUS status = ORDER_STATUS::NONE;
 };

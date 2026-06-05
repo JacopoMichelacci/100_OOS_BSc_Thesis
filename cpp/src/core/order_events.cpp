@@ -10,6 +10,7 @@ std::ostream& operator<<(std::ostream& os, ORDER_STATUS status) {
         case (ORDER_STATUS::PFILLED): {return os << "pfilled";}
         case (ORDER_STATUS::REJECTED): {return os << "rejected";}
         case (ORDER_STATUS::CANCELED): {return os << "canceled";}
+        case (ORDER_STATUS::NONE): {return os << "none";}
     }
 
     return os;
@@ -20,6 +21,7 @@ std::ostream& operator<<(std::ostream& os, ORDER_SIDE side) {
     switch (side) {
         case (ORDER_SIDE::BUY): {return os << "buy";}
         case (ORDER_SIDE::SELL): {return os << "sell";}
+        case (ORDER_SIDE::NONE): {return os << "none";}
     }
 
     return os;
