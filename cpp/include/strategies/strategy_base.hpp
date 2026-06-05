@@ -28,6 +28,17 @@ namespace detail {
 }
 
 
+/*
+ * SIGNAL semantics:
+ *
+ *   LONG   → open long position    (valid when position == 0)
+ *   SHORT  → open short position   (valid when position == 0)
+ *   SELL   → close long position   (valid when position > 0)
+ *   COVER  → close short position  (valid when position < 0)
+ *   FLAT   → no-op                 (always valid)
+ *
+ * Invalid signals (e.g. LONG while already long) are logged as REJECTED orders.
+ */
 enum class SIGNAL {
     SELL = -2,
     SHORT = -1,
@@ -40,7 +51,7 @@ struct StrategyConfig {
     bool active = true;
     bool long_active = true;
     bool short_active = true;
-    
+
     TS_UNIT     ts_unit     = TS_UNIT::MILLISECONDS;
     DATE_FORMAT date_format = DATE_FORMAT::DDMMYYYY;
 };
