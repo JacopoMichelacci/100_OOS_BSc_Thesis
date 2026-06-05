@@ -52,7 +52,8 @@ inline long long to_epoch_ms(const std::string& ts, DATE_FORMAT format = DATE_FO
 
     // check if it has time and if the first 4 chars are digits (year_first)
     bool has_time   = s.size() > 10;
-    bool year_first = std::isdigit(s[0]) && std::isdigit(s[1]) &&
+    bool year_first = s.size() >= 5 &&
+                      std::isdigit(s[0]) && std::isdigit(s[1]) &&
                       std::isdigit(s[2]) && std::isdigit(s[3]) &&
                       s[4] == '-';
 
@@ -102,7 +103,7 @@ inline long long to_epoch_ms(long long ts, TS_UNIT unit = TS_UNIT::MILLISECONDS)
  * to_date(ts_ms)        → YYYYMMDD          as long long  (e.g. 20240605)
  * to_time(ts_ms)        → HHMMSS.mmm        as double     (e.g. 143000.123)
  * to_datetime(ts_ms)    → YYYYMMDDHHMMSSMMM as long long  (e.g. 20240605143000123)
- * to_day_of_week(ts_ms) → 1-7               as int        (0=Sun, 1=Mon ... 6=Sat)
+ * to_day_of_week(ts_ms) → 0-6               as int        (0=Sun, 1=Mon ... 6=Sat)
 */
 
 // portable thread-safe localtime
@@ -116,64 +117,57 @@ inline std::tm localtime_safe(std::time_t t) {
     return result;
 }
 
+class TimeConverter {
+public:    
+    explicit TimeConverter(long long ts) { update(ts); }
 
-inline long long to_date(long long ts) {
-    std::time_t t = static_cast<std::time_t>(ts / 1000);
-    auto tm = localtime_safe(t);
+    void update(long long ts) {
+        ms = ts % 1000;
+        tm = localtime_safe(static_cast<std::time_t>(ts / 1000));
+    }
 
-    int year  = tm.tm_year + 1900;
-    int month = tm.tm_mon  + 1;
-    int day   = tm.tm_mday;
+    long long to_date() const {
+        int year  = tm.tm_year + 1900;
+        int month = tm.tm_mon  + 1;
+        int day   = tm.tm_mday;
 
-    return year * 10000 + month * 100 + day;
-}
+        return year * 10000 + month * 100 + day;
+    }
 
+    double to_time() const {
+        int hour = tm.tm_hour;
+        int min  = tm.tm_min;
+        int sec  = tm.tm_sec;
 
-inline double to_time(long long ts) {
-    int ms = ts % 1000;
+        return hour * 10000 + min * 100 + sec + ms / 1000.0;
+    }
 
-    std::time_t t = static_cast<std::time_t>(ts / 1000);
-    auto tm = localtime_safe(t);
+    long long to_datetime() const {
+        long long year  = tm.tm_year + 1900;
+        long long month = tm.tm_mon  + 1;
+        long long day   = tm.tm_mday;
+        long long hour  = tm.tm_hour;
+        long long min   = tm.tm_min;
+        long long sec   = tm.tm_sec;
 
-    int hour = tm.tm_hour;
-    int min  = tm.tm_min;
-    int sec  = tm.tm_sec;
+        return year  * 10000000000000LL
+             + month * 100000000000LL
+             + day   * 1000000000LL
+             + hour  * 10000000LL
+             + min   * 100000LL
+             + sec   * 1000LL
+             + ms;
+    }
 
-    return hour * 10000 + min * 100 + sec + ms / 1000.0;
-}
+    int to_day_of_week() const { 
+        return tm.tm_wday; 
+    }
 
+private:
+    std::tm tm = {};
+    int     ms = 0;
+};
 
-inline long long to_datetime(long long ts) {
-    int ms = ts % 1000;
-
-    std::time_t t = static_cast<std::time_t>(ts / 1000);
-    auto tm = localtime_safe(t);
-
-    long long year  = tm.tm_year + 1900;
-    long long month = tm.tm_mon  + 1;
-    long long day   = tm.tm_mday;
-    long long hour  = tm.tm_hour;
-    long long min   = tm.tm_min;
-    long long sec   = tm.tm_sec;
-
-    // YYYYMMDDHHMMSSMMM
-    return year  * 10000000000000LL
-         + month * 100000000000LL
-         + day   * 1000000000LL
-         + hour  * 10000000LL
-         + min   * 100000LL
-         + sec   * 1000LL
-         + ms;
-}
-
-
-inline int to_day_of_week(long long ts) {
-    std::time_t t = static_cast<std::time_t>(ts / 1000);
-    auto tm = localtime_safe(t);
-
-    // 0=Sunday, 1=Monday, ..., 6=Saturday
-    return tm.tm_wday;
-}
 
 
 // created this concept so when calling get_timestamp()
