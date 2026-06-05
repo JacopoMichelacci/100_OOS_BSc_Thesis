@@ -42,4 +42,6 @@ public:
     long long strategy_id = -1;                 // a unique identifier for a strategy; unique int given at construction 
     long long id = -1;                          // id of the order event
     ORDER_STATUS status = ORDER_STATUS::NONE;
+    std::string reason = "";
 };
+std::ostream& operator<<(std::ostream& os, const OrderEvent& e);
