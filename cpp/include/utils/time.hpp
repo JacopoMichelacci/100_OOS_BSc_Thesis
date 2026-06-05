@@ -117,7 +117,7 @@ inline std::tm localtime_safe(std::time_t t) {
 
 class TimeConverter {
 public:    
-    explicit TimeConverter(long long ts) { update(ts); }
+    TimeConverter() = default;
 
     void update(long long ts) {
         ms = ts % 1000;
