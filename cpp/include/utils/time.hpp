@@ -84,14 +84,12 @@ inline long long to_epoch_ms(const std::string& ts, DATE_FORMAT format = DATE_FO
 enum class TS_UNIT { SECONDS, MILLISECONDS };
 
 // numeric version
-inline long long to_epoch_ms(long long ts, TS_UNIT unit = TS_UNIT::MILLISECONDS) {
+template <std::integral T>
+inline long long to_epoch_ms(T ts, TS_UNIT unit = TS_UNIT::MILLISECONDS) {
     switch (unit) {
-        case (TS_UNIT::SECONDS): 
-            return ts * 1000;
-        case (TS_UNIT::MILLISECONDS):
-            return ts;
-        default:
-            throw std::invalid_argument("to_epoch_ms: unknown TS_UNIT");
+        case TS_UNIT::SECONDS:      return static_cast<long long>(ts) * 1000;
+        case TS_UNIT::MILLISECONDS: return static_cast<long long>(ts);
+        default: throw std::invalid_argument("to_epoch_ms: unknown TS_UNIT");
     }
 }
 
