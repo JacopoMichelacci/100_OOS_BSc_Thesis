@@ -4,11 +4,14 @@
 #include <string>
 
 #include "strategies/strategy_base.hpp"
+#include "core/order_events.hpp"
 #include "indicators/built_in/moving_average.hpp"
 
 struct MACConfig {
     int16_t fast_len = 10;
     int16_t slow_len = 30;
+
+    double qty = 1.0;
 };
 
 template <typename Tin>
@@ -27,7 +30,7 @@ public:
         }
     }
 
-    virtual SIGNAL on_data(const Tin& input) override {
+    virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
 
         fast_sma.update_buffer(input);
@@ -35,25 +38,24 @@ public:
 
         // check we have data valid ma's
         if (!slow_sma[-1] || !slow_sma[-2]) {
-            return SIGNAL::FLAT;
+            return;
         }
 
         // LONG 
         if (this->bconfig.long_active) {
             if (fast_sma[-1] >= slow_sma[-1] && fast_sma[-2] < slow_sma[-2]) {
-                return SIGNAL::LONG;
+                out.push_back({.signal = SIGNAL::BBUY, .qty = params.qty, .type = ORDER_TYPE::MARKET});
             }
         }
 
         // SHORT
         if (this->bconfig.short_active) {
             if (fast_sma[-1] <= slow_sma[-1] && fast_sma[-2] > slow_sma[-2]) {
-                return SIGNAL::SHORT;
+                out.push_back({.signal = SIGNAL::BSELL, .qty = params.qty, .type = ORDER_TYPE::MARKET});
             }
         }
 
-
-        return SIGNAL::FLAT;
+        
     }
 
 private:

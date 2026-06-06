@@ -91,15 +91,15 @@ public:
     virtual ~Strategy() = default;
 
     // works for: Live and Backtest -- generates a OrderEvent action event
-    virtual std::vector<OrderEvent> on_data(const Tin& input) = 0;
+    virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) = 0;
 
     // works for backtest
     void on_bt_data(std::span<const Tin> inputs, std::vector<std::vector<OrderEvent>>& out) {
         out.clear();
-        out.reserve(inputs.size());
+        out.resize(inputs.size());
 
-        for (const auto& in : inputs) {
-            out.push_back(on_data(in));
+        for (std::size_t i=0; i < inputs.size(); ++i) {
+            on_data(inputs[i], out[i]);
         }
     }
 
@@ -115,6 +115,7 @@ protected:
     long long id;
     std::string tag;
 
+    // base config
     StrategyConfig bconfig;
 
     // resolves the right timestamp type at compile time

@@ -21,8 +21,10 @@ struct BacktestConfig {
 template <typename Tin>
 class Backtester {
 public:
-    Backtester(Strategy<Tin> strat_, BacktestConfig cfg_) 
+    Backtester(Strategy<Tin>& strat_, BacktestConfig cfg_ = {}) 
         : strat(strat_), cfg(cfg_) {}
+
+        
 
 private:
     Strategy<Tin>& strat;
