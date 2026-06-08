@@ -93,21 +93,24 @@ public:
     // works for: Live and Backtest -- generates a OrderEvent action event
     virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) = 0;
 
-    // works for backtest
-    void on_bt_data(std::span<const Tin> inputs, std::vector<std::vector<OrderEvent>>& out) {
-        out.clear();
-        out.resize(inputs.size());
+    // // works for backtest -- KINDA redundant as backrester handles 
+    // // this and needs to call on_data to have no lookahead
+    // void on_bt_data(std::span<const Tin> inputs, std::vector<std::vector<OrderEvent>>& out) {
+    //     out.clear();
+    //     out.resize(inputs.size());
 
-        for (std::size_t i=0; i < inputs.size(); ++i) {
-            on_data(inputs[i], out[i]);
-        }
-    }
+    //     for (std::size_t i=0; i < inputs.size(); ++i) {
+    //         on_data(inputs[i], out[i]);
+    //     }
+    // }
 
 
     // getters
     std::string_view get_name() const { return name; }
     long long get_id() const { return id; }
     std::string_view get_tag() const { return tag; }
+
+    const StrategyConfig& get_config() { return bconfig; }
 
 
 protected:
@@ -117,6 +120,7 @@ protected:
 
     // base config
     StrategyConfig bconfig;
+
 
     // resolves the right timestamp type at compile time
     long long resolve_ts(const Tin& input) {
