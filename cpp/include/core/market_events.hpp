@@ -26,6 +26,20 @@ struct OHLCVEvent : public MarketEvent {
     double low = 0.0;
     double close = 0.0;
     double volume = 0.0;
+
+
+    static OHLCVEvent from_csv_row(const std::vector<std::string>& row) {
+        OHLCVEvent ev;
+
+        ev.ts = std::stoll(row[0]);
+        ev.open = std::stod(row[0]);
+        ev.high = std::stod(row[0]);
+        ev.low = std::stod(row[0]);
+        ev.close = std::stod(row[0]);
+        ev.volume = std::stod(row[0]);
+
+        return ev;
+    }
 };
 std::ostream& operator<<(std::ostream& os, const OHLCVEvent& e);
 
