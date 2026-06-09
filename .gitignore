@@ -12,3 +12,8 @@ wheels/
 
 # vscode settings
 .vscode/
+
+
+
+# ignore data files
+_data/

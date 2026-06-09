@@ -10,7 +10,7 @@ def main():
     tickers = ['AAPL', 'AMZN']
     start_date = '2000-01-01'
 
-    ql.pull_ohlcv_yf(str(stock_folder_path), tickers, True, start_date, auto_adjust=True)
+    ql.pull_ohlcv_yf(str(stock_folder_path), tickers, True, start_date, auto_adjust=True, to_csv=True)
 
 
 
