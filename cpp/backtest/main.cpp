@@ -18,7 +18,7 @@ int main() {
     std::cout << "loaded " << data.size() << " bars\n";
     
     // 2. set up strategy
-    MAC<OHLCVEvent> strat("mac_demo", MACConfig{
+    MAC<OHLCVEvent> strat("mac_demo", MACConfig<OHLCVEvent>{
         .fast_len = 10,
         .slow_len = 30,
         .qty = 1.0
