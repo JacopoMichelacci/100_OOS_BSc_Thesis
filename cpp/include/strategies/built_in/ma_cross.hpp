@@ -5,11 +5,15 @@
 
 #include "strategies/strategy_base.hpp"
 #include "core/order_events.hpp"
+#include "core/market_events.hpp"
 #include "indicators/built_in/moving_average.hpp"
 
 struct MACConfig {
     int16_t fast_len = 10;
+    PRICE_FIELD fast_field = PRICE_FIELD::CLOSE;
+
     int16_t slow_len = 30;
+    PRICE_FIELD slow_field = PRICE_FIELD::CLOSE;
 
     double qty = 1.0;
 };
@@ -33,8 +37,8 @@ public:
     virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
 
-        fast_sma.update_buffer(input);
-        slow_sma.update_buffer(input);
+        fast_sma.update_buffer(input.close);
+        slow_sma.update_buffer(input.close);
 
         // check we have data valid ma's
         if (!slow_sma[-1] || !slow_sma[-2]) {

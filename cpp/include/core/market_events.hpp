@@ -3,11 +3,20 @@
 #include <ostream>
 
 
-enum class MKT_EVENT_TYPE {
+enum class MKT_EVENT_TYPE : std::uint8_t {
     OHLCV,
     QUOTE,
     NONE
 };
+
+enum class PRICE_FIELD : std::uint8_t {
+    OPEN,
+    HIGH,
+    LOW,
+    CLOSE
+};
+
+
 
 struct MarketEvent {
     long long ts = 0;

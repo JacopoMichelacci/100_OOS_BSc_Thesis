@@ -31,35 +31,6 @@ namespace detail {
 }
 
 
-/*
- * SIGNAL semantics:
- *
- * Strict (rejected if state mismatch):
- *   LONG   → open long position    (valid when open_position >= 0)
- *   SHORT  → open short position   (valid when open_position <= 0)
- *   SELL   → close long position   (valid when open_position > 0)
- *   COVER  → close short position  (valid when open_position < 0)
- *
- * Blind (state-blind, just transact qty in this direction):
- *   BBUY   → buy  qty: position += qty  (scales in, covers shorts, flips if qty > |pos|)
- *   BSELL  → sell qty: position -= qty
- *
- *   FLAT   → no-op
- *
- * Invalid strict signals are logged as REJECTED orders. Blind signals never internally reject based on direction reasons.
- */
-enum class SIGNAL {
-    SELL = -2,
-    SHORT = -1,
-    FLAT = 0,
-    LONG = 1,
-    COVER = 2,
-
-    BBUY = 9,
-    BSELL = -9,
-};
-std::ostream& operator<<(std::ostream& os, SIGNAL sig);
-
 struct StrategyConfig {
     bool active = true;             // allows trades
     bool long_active = true;        // allows longs
