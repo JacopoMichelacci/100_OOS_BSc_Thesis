@@ -21,7 +21,7 @@
  *
  * Invalid strict signals are logged as REJECTED orders. Blind signals never internally reject based on direction reasons.
  */
-enum class SIGNAL {
+enum class SIGNAL : std::int8_t {
     SELL = -2,
     SHORT = -1,
     FLAT = 0,
@@ -33,18 +33,18 @@ enum class SIGNAL {
 };
 std::ostream& operator<<(std::ostream& os, SIGNAL sig);
 
-enum class ORDER_STATUS {
-    PENDING,
-    FILLED,
-    PFILLED,
-    REJECTED,
-    CANCELED,
+enum class ORDER_STATUS : std::int8_t {
+    PENDING = 0,
+    FILLED = 1,
+    PFILLED = 2,
+    REJECTED = -1,
+    CANCELED = -9
 };
 std::ostream& operator<<(std::ostream& os, ORDER_STATUS status);
 
-enum class ORDER_TYPE {
-    MARKET,
-    NONE
+enum class ORDER_TYPE : std::int8_t {
+    MARKET = 1,
+    NONE = 0
 };
 std::ostream& operator<<(std::ostream& os, ORDER_TYPE type);
 

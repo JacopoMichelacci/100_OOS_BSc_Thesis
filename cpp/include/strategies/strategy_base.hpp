@@ -61,19 +61,8 @@ public:
 
     virtual ~Strategy() = default;
 
-    // works for: Live and Backtest -- generates a OrderEvent action event
+    // works for: Live and Backtest -- generates a vector of OrderEvents
     virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) = 0;
-
-    // // works for backtest -- KINDA redundant as backrester handles 
-    // // this and needs to call on_data to have no lookahead
-    // void on_bt_data(std::span<const Tin> inputs, std::vector<std::vector<OrderEvent>>& out) {
-    //     out.clear();
-    //     out.resize(inputs.size());
-
-    //     for (std::size_t i=0; i < inputs.size(); ++i) {
-    //         on_data(inputs[i], out[i]);
-    //     }
-    // }
 
 
     // getters

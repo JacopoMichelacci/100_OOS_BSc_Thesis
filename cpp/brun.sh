@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
-cd "$(dirname "$0")"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-cmake -S . -B build
-cmake --build build
-./build/thesis
+cmake -S "$SCRIPT_DIR" -B "$SCRIPT_DIR/build"
+cmake --build "$SCRIPT_DIR/build"
+
+cd "$REPO_ROOT"
+"$SCRIPT_DIR/build/thesis"

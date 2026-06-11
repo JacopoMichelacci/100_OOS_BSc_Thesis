@@ -17,3 +17,7 @@ target_include_directories(
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wno-reorder-init-list)
+endif()
