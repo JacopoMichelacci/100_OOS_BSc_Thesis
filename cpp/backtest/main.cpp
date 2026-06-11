@@ -1,7 +1,6 @@
 // cpp/backtest/main.cpp
 
 #include <iostream>
-#include <fstream>
 #include <string>
 
 #include "utils/csv_loader.hpp"
@@ -34,22 +33,6 @@ int main() {
     auto results = bt.run(strat, data);
     std::cout << "ran backtest, final equity: " << results.equity_curve.back() 
               << ", n orders: " << results.hlog.size() << "\n";
-
-    // 5. dump equity curve
-    std::ofstream eq_out("data/_data/equity.csv");
-    eq_out << "ts,equity\n";
-    for (std::size_t i = 0; i < results.equity_curve.size(); ++i) {
-        eq_out << data[i].ts << "," << results.equity_curve[i] << "\n";
-    }
-
-    // 6. dump order log
-    std::ofstream log_out("data/_data/hlog.csv");
-    log_out << "id,ts,signal,qty,price,status,reason\n";
-    for (const auto& o : results.hlog) {
-        log_out << o.id << "," << o.ts << "," << o.signal << ","
-                << o.qty << "," << o.price << "," << o.status << ","
-                << o.reason << "\n";
-    }
 
     return 0;
 }
