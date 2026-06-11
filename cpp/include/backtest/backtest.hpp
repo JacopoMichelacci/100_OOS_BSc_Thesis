@@ -18,15 +18,14 @@ struct BacktestConfig {
     double cost_bps = 3.0;
 };
 
-
 template <typename Tin>
 class Backtester {
 public:
-    Backtester(Strategy<Tin>& strat_, BacktestConfig cfg_ = {}) 
-        : strat(strat_), cfg(cfg_) {}
+    explicit Backtester(BacktestConfig cfg_ = {}) 
+        : cfg(cfg_) {}
 
 
-    BacktestResults run(std::span<const Tin> input) {
+    BacktestResults run(Strategy<Tin>& strat, std::span<const Tin> input) {
         // reset state
         results = {};
         results.equity_curve.reserve(input.size());
@@ -44,7 +43,7 @@ public:
             const auto& in = input[i];
 
             // execute pending orders (no look ahead)
-            execute_orders(plog, in.open, in.ts, cash, opos, eprice, id_gen);
+            execute_orders(plog, in.open, in.ts, cash, opos, eprice, id_gen, strat);
 
             // hlog update
             results.hlog.insert(results.hlog.end(), plog.begin(), plog.end());
@@ -62,7 +61,6 @@ public:
 
 
 private:
-    Strategy<Tin>& strat;
     BacktestConfig cfg;
     BacktestResults results;
 
@@ -93,7 +91,8 @@ private:
                         double& cash,
                         double& opos,
                         double& eprice,
-                        OrderIdGenerator& id_gen) {
+                        OrderIdGenerator& id_gen,
+                        Strategy<Tin>& strat) {
 
         const auto& sc = strat.get_config();
 

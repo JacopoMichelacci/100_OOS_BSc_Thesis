@@ -15,7 +15,7 @@
 int main() {
     // 1. load data
     auto data = load_csv<OHLCVEvent>("data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv");
-    std::cout << "loaded " << data.size() << " bars\n";
+
     
     // 2. set up strategy
     MAC<OHLCVEvent> strat("mac_demo", MACConfig<OHLCVEvent>{
@@ -25,13 +25,13 @@ int main() {
     });
 
     // 3. set up backtester
-    Backtester<OHLCVEvent> bt(strat, BacktestConfig{
+    Backtester<OHLCVEvent> bt(BacktestConfig{
         .initial_capital = 100'000.0,
         .cost_bps = 3.0
     });
 
     // 4. run
-    auto results = bt.run(data);
+    auto results = bt.run(strat, data);
     std::cout << "ran backtest, final equity: " << results.equity_curve.back() 
               << ", n orders: " << results.hlog.size() << "\n";
 
