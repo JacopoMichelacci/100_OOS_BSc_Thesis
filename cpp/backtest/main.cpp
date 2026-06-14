@@ -9,6 +9,7 @@
 
 #include "strategies/built_in/ma_cross.hpp"
 #include "backtest/backtest.hpp"
+#include "backtest/backtest_io.hpp"
 
 
 int main() {
@@ -33,6 +34,9 @@ int main() {
     auto results = bt.run(strat, data);
     std::cout << "ran backtest, final equity: " << results.equity_curve.back() 
               << ", n orders: " << results.hlog.size() << "\n";
+
+    // Export raw results for Python reporting/plotting.
+    write_backtest_results(data, results, "output/backtest/_assets");
 
     return 0;
 }

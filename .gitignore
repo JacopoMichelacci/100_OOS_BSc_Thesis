@@ -15,5 +15,6 @@ wheels/
 
 
 
-# ignore data files
+# ignore data files and out files
 _data/
+output/
