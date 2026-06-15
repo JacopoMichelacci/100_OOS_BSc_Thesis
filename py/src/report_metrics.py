@@ -16,16 +16,24 @@ class MetricsConfig:
     avg_trade: bool = True
     sharpe: bool = True
     max_drawdown: bool = True
-    return_shape: bool = True
+    skewness: bool = True
+    kurtosis: bool = True
     equity_curve_plot: bool = True
-    equity_curve_dd_cfg: str = "all"
+    plot_equity_curve_cfg: str = "all"
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
 
 
 class Metrics:
-    """Computes scalar metrics and plot assets from backtest CSV outputs."""
+    """
+    Computes backtest metrics and plot assets from C++ backtester CSV outputs.
+
+    The class owns cleaned in-memory copies of the equity curve and order log.
+    Derived series such as returns and drawdowns are computed once and reused by
+    metric methods. Calling run() executes the enabled metrics from MetricsConfig
+    and returns a flat report dictionary suitable for printing or later export.
+    """
 
     def __init__(
         self,
@@ -42,10 +50,9 @@ class Metrics:
         self.equity = pl.read_csv(self.equity_path)
         self.orders = pl.read_csv(self.orders_path)
         self._clean_equity()
-        self.equity_returns = self._calc_equity_returns()
-        self.equity_notional_returns = self._calc_equity_notional_returns()
-        self._add_drawdown()
+        self._add_equity_columns()
         self.periods_per_year = self._resolve_periods_per_year()
+
         self.report: dict[str, float | int | str] = {}
 
     def _clean_equity(self) -> None:
@@ -56,13 +63,21 @@ class Metrics:
             & pl.col("equity").is_not_nan()
         )
 
-    def _calc_equity_returns(self) -> pl.Series:
-        """Compute cleaned percentage equity returns once for reuse."""
-        return self.equity["equity"].pct_change().drop_nulls().drop_nans()
+    def _add_equity_columns(self) -> None:
+        """Add reusable return and drawdown columns to the equity curve."""
+        # Return columns are kept on self.equity so every metric uses one definition.
+        self.equity = self.equity.with_columns(
+            pl.col("equity").pct_change().alias("eq_ret"),
+            pl.col("equity").diff().alias("eq_ret_not"),
+        )
 
-    def _calc_equity_notional_returns(self) -> pl.Series:
-        """Compute cleaned notional equity changes once for reuse."""
-        return self.equity["equity"].diff().drop_nulls().drop_nans()
+        # Drawdown columns are also stored once and reused by metrics and plots.
+        self.equity = self.equity.with_columns(
+            pl.col("equity").cum_max().alias("equity_peak")
+        ).with_columns(
+            (pl.col("equity") - pl.col("equity_peak")).alias("dd_not"),
+            (pl.col("equity") / pl.col("equity_peak") - 1.0).alias("dd_pct"),
+        )
 
     def _resolve_periods_per_year(self) -> float:
         """Use an explicit annualization override when provided, otherwise infer it."""
@@ -83,7 +98,7 @@ class Metrics:
         median_diff_ms = ts_diffs.median()
         if median_diff_ms is None:
             raise ValueError("cannot infer periods_per_year: median timestamp difference is null")
-
+        
         if median_diff_ms <= 0:
             raise ValueError(
                 f"cannot infer periods_per_year: non-positive median timestamp difference {median_diff_ms}"
@@ -98,7 +113,8 @@ class Metrics:
         self.avg_trade()
         self.sharpe()
         self.max_drawdown()
-        self.return_shape()
+        self.skewness()
+        self.kurtosis()
         self.plot_equity_curve()
 
         return self.report
@@ -108,8 +124,8 @@ class Metrics:
         if not self.config.mean_returns:
             return
 
-        self.report["mean_return_pct"] = self.equity_returns.mean() * 100.0
-        self.report["mean_return_notional"] = self.equity_notional_returns.mean()
+        self.report["mean_return_pct"] = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * 100.0
+        self.report["mean_return_notional"] = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean()
 
     def avg_trade(self) -> None:
         """Add net profit, trade count, and average profit per filled order."""
@@ -142,8 +158,9 @@ class Metrics:
         if not self.config.sharpe:
             return
 
-        mean_return = self.equity_returns.mean()
-        std_return = self.equity_returns.std()
+        eq_ret = self.equity["eq_ret"].drop_nulls().drop_nans()
+        mean_return = eq_ret.mean()
+        std_return = eq_ret.std()
         if std_return is None or std_return == 0.0:
             self.report["sharpe"] = 0.0
             return
@@ -157,76 +174,37 @@ class Metrics:
         if not self.config.max_drawdown:
             return
 
-        self.report["max_drawdown_notional"] = self.equity["drawdown_notional"].min()
-        self.report["max_drawdown_pct"] = self.equity["drawdown_pct"].min() * 100.0
+        self.report["max_dd_not"] = self.equity["dd_not"].min()
+        self.report["max_dd_pct"] = self.equity["dd_pct"].min() * 100.0
 
-    def _add_drawdown(self) -> None:
-        """Attach peak equity and drawdown columns to the in-memory equity curve."""
-        if {"drawdown_notional", "drawdown_pct"}.issubset(self.equity.columns):
+    def skewness(self) -> None:
+        """Add skewness of percentage returns."""
+        if not self.config.skewness:
             return
 
-        self.equity = self.equity.with_columns(
-            pl.col("equity").cum_max().alias("equity_peak")
-        ).with_columns(
-            (pl.col("equity") - pl.col("equity_peak")).alias("drawdown_notional"),
-            (pl.col("equity") / pl.col("equity_peak") - 1.0).alias("drawdown_pct"),
-        )
+        value = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
+        self.report["return_skewness"] = 0.0 if value is None else value
 
-    def return_shape(self) -> None:
-        """Add skewness and excess kurtosis of percentage returns."""
-        if not self.config.return_shape:
+    def kurtosis(self) -> None:
+        """Add excess kurtosis of percentage returns."""
+        if not self.config.kurtosis:
             return
 
-        returns = self.equity_returns.to_list()
-        self.report["return_skewness"] = self._skewness(returns)
-        self.report["return_kurtosis"] = self._kurtosis(returns)
-
-    def _clean_values(self, values: list[float | None]) -> list[float]:
-        """Keep only non-null numeric values."""
-        return [float(v) for v in values if v is not None]
-
-    def _skewness(self, values: list[float | None]) -> float:
-        """Compute population skewness."""
-        vals = self._clean_values(values)
-        n = len(vals)
-        if n == 0:
-            return 0.0
-
-        mean = sum(vals) / n
-        centered = [v - mean for v in vals]
-        variance = sum(v * v for v in centered) / n
-        if variance == 0.0:
-            return 0.0
-
-        std = variance ** 0.5
-        return sum(v ** 3 for v in centered) / n / std ** 3
-
-    def _kurtosis(self, values: list[float | None]) -> float:
-        """Compute population excess kurtosis."""
-        vals = self._clean_values(values)
-        n = len(vals)
-        if n == 0:
-            return 0.0
-
-        mean = sum(vals) / n
-        centered = [v - mean for v in vals]
-        variance = sum(v * v for v in centered) / n
-        if variance == 0.0:
-            return 0.0
-
-        std = variance ** 0.5
-        return sum(v ** 4 for v in centered) / n / std ** 4 - 3.0
+        value = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
+        self.report["return_kurtosis"] = 0.0 if value is None else value
 
     def plot_equity_curve(self, tick_count: int = 8) -> None:
         """Save an equity curve plot using the equity timestamps as the x-axis."""
         if not self.config.equity_curve_plot:
             return
 
-        self._add_equity_datetime()
-        dd_cfg = self._validate_equity_curve_dd_cfg(self.config.equity_curve_dd_cfg)
+        dd_cfg = self._validate_equity_curve_dd_cfg(self.config.plot_equity_curve_cfg)
 
         out_path = self.assets_dir / "equity_curve.png"
-        timestamps = self.equity["datetime"].to_list()
+        timestamps = [
+            datetime.fromtimestamp(ts / 1000.0)
+            for ts in self.equity["ts"].to_list()
+        ]
 
         plot_rows = 1
         if dd_cfg in {"ddnot", "ddpct"}:
@@ -254,7 +232,7 @@ class Metrics:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
-                self.equity["drawdown_notional"].to_list(),
+                self.equity["dd_not"].to_list(),
                 "Drawdown Notional",
                 "Drawdown",
             )
@@ -264,7 +242,7 @@ class Metrics:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
-                self.equity["drawdown_pct"].to_list(),
+                self.equity["dd_pct"].to_list(),
                 "Drawdown %",
                 "Drawdown %",
             )
@@ -304,15 +282,6 @@ class Metrics:
         ax.set_title(title)
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.3)
-
-    def _add_equity_datetime(self) -> None:
-        """Attach a datetime column derived from epoch-ms timestamps."""
-        if "datetime" in self.equity.columns:
-            return
-
-        self.equity = self.equity.with_columns(
-            pl.from_epoch("ts", time_unit="ms").alias("datetime")
-        )
 
     def _set_date_ticks(self, ax: plt.Axes, timestamps: list[datetime], xtick_count: int) -> None:
         """Show a fixed number of readable date ticks for the plotted date span."""
