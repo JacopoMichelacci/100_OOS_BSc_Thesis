@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Literal
 
@@ -10,10 +10,6 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 
-MetricConfig = tuple[bool, int, int]
-PlotConfig = tuple["DRAWDOWN_PLOT_MODE", float, float, int]
-
-
 class DRAWDOWN_PLOT_MODE(Enum):
     """Controls which drawdown panels are included under the equity curve."""
 
@@ -21,7 +17,6 @@ class DRAWDOWN_PLOT_MODE(Enum):
     DD_PCT = "dd_pct"
     DD_NOT = "dd_not"
     ALL = "all"
-
 
 @dataclass(frozen=True)
 class ReportItem:
@@ -33,17 +28,48 @@ class ReportItem:
     kind: Literal["metric", "plot"]
 
 
+
+
+@dataclass(frozen=True)
+class MetricConfig:
+    """Config for one scalar metric."""
+
+    enabled: bool = True
+    decimals: int = 2
+    importance: int = 1
+
+
+@dataclass(frozen=True)
+class PlotConfig:
+    """Common config for plot assets."""
+
+    enabled: bool = True
+    figsize_x: float = 12.0
+    figsize_y: float = 4.8
+    importance: int = 1
+
+@dataclass(frozen=True)
+class EquityCurvePlotConfig:
+    """Config for the equity curve plot asset."""
+
+    base: PlotConfig = field(default_factory=PlotConfig)
+    dd_mode: DRAWDOWN_PLOT_MODE = DRAWDOWN_PLOT_MODE.ALL
+
+    
 @dataclass(frozen=True)
 class MetricsConfig:
     """Controls which metrics/assets are produced by Metrics.run()."""
 
-    mean_returns: MetricConfig = (True, 2, 1)
-    avg_trade: MetricConfig = (True, 1, 1)
-    sharpe: MetricConfig = (True, 2, 1)
-    max_drawdown: MetricConfig = (True, 1, 1)
-    skewness: MetricConfig = (True, 2, 2)
-    kurtosis: MetricConfig = (True, 2, 2)
-    plot_equity_curve_cfg: PlotConfig = (DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8, 1)
+    tot_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
+    tot_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
+    mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
+    mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
+    avg_trade: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
+    sharpe: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
+    max_drawdown: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
+    skewness: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
+    kurtosis: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
+    plot_equity_curve_cfg: EquityCurvePlotConfig = field(default_factory=EquityCurvePlotConfig)
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
@@ -102,6 +128,22 @@ class Metrics:
             (pl.col("equity") - pl.col("equity_peak")).alias("dd_not"),
             (pl.col("equity") / pl.col("equity_peak") - 1.0).alias("dd_pct"),
         )
+    
+
+    def run(self) -> list[ReportItem]:
+        """Run enabled metrics and return the collected report values."""
+        self.tot_ret_pct()
+        self.tot_ret_not()
+        self.mean_yearly_ret_pct()
+        self.mean_yearly_ret_not()
+        self.avg_trade()
+        self.sharpe()
+        self.max_drawdown()
+        self.skewness()
+        self.kurtosis()
+        self.plot_equity_curve()
+
+        return self.report
 
     def _resolve_periods_per_year(self) -> float:
         """Use an explicit annualization override when provided, otherwise infer it."""
@@ -131,18 +173,6 @@ class Metrics:
         year_ms = self.config.trading_days_inferred * 24 * 60 * 60 * 1000
         return year_ms / median_diff_ms
 
-    def run(self) -> list[ReportItem]:
-        """Run enabled metrics and return the collected report values."""
-        self.mean_returns()
-        self.avg_trade()
-        self.sharpe()
-        self.max_drawdown()
-        self.skewness()
-        self.kurtosis()
-        self.plot_equity_curve()
-
-        return self.report
-
     def _round_metric(self, value: float | int | None, decimals: int) -> float:
         """Round a scalar metric while normalizing missing values to zero."""
         if value is None:
@@ -150,55 +180,97 @@ class Metrics:
 
         return round(float(value), decimals)
 
-    def mean_returns(self) -> None:
-        """Add average percentage and notional equity returns to the report."""
-        enabled, decimals, importance = self.config.mean_returns
-        if not enabled:
+    def tot_ret_pct(self) -> None:
+        """Add total percentage return from first to final equity."""
+        cfg = self.config.tot_ret_pct
+        if not cfg.enabled:
             return
 
-        mean_return_pct = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * 100.0
-        mean_return_notional = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean()
+        if self.equity.is_empty() or self.equity["equity"][0] == 0:
+            value = 0.0
+        else:
+            value = (self.equity["equity"][-1] / self.equity["equity"][0] - 1.0) * 100.0
 
         self.report.append(
             ReportItem(
-                "mean_return_pct",
-                self._round_metric(mean_return_pct, decimals),
-                importance,
+                "tot_ret_pct",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
+
+    def tot_ret_not(self) -> None:
+        """Add total notional return from first to final equity."""
+        cfg = self.config.tot_ret_not
+        if not cfg.enabled:
+            return
+
+        value = self._net_profit()
         self.report.append(
             ReportItem(
-                "mean_return_notional",
-                self._round_metric(mean_return_notional, decimals),
-                importance,
+                "tot_ret_not",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
+                "metric",
+            )
+        )
+
+    def mean_yearly_ret_pct(self) -> None:
+        """Add annualized average percentage return."""
+        cfg = self.config.mean_yearly_ret_pct
+        if not cfg.enabled:
+            return
+
+        value = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * self.periods_per_year * 100.0
+        self.report.append(
+            ReportItem(
+                "mean_yearly_ret_pct",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
+                "metric",
+            )
+        )
+
+    def mean_yearly_ret_not(self) -> None:
+        """Add annualized average notional return."""
+        cfg = self.config.mean_yearly_ret_not
+        if not cfg.enabled:
+            return
+
+        value = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean() * self.periods_per_year
+        self.report.append(
+            ReportItem(
+                "mean_yearly_ret_not",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
 
     def avg_trade(self) -> None:
         """Add net profit, trade count, and average profit per filled order."""
-        enabled, decimals, importance = self.config.avg_trade
-        if not enabled:
+        cfg = self.config.avg_trade
+        if not cfg.enabled:
             return
 
         n_trades = self._filled_order_count()
         net_profit = self._net_profit()
 
-        self.report.append(ReportItem("n_trades", n_trades, importance, "metric"))
+        self.report.append(ReportItem("n_trades", n_trades, cfg.importance, "metric"))
         self.report.append(
             ReportItem(
                 "net_profit",
-                self._round_metric(net_profit, decimals),
-                importance,
+                self._round_metric(net_profit, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
         self.report.append(
             ReportItem(
                 "avg_trade",
-                self._round_metric(net_profit / n_trades if n_trades else 0.0, decimals),
-                importance,
+                self._round_metric(net_profit / n_trades if n_trades else 0.0, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
@@ -219,15 +291,15 @@ class Metrics:
 
     def sharpe(self) -> None:
         """Add annualized Sharpe based on inferred or overridden periods per year."""
-        enabled, decimals, importance = self.config.sharpe
-        if not enabled:
+        cfg = self.config.sharpe
+        if not cfg.enabled:
             return
 
         eq_ret = self.equity["eq_ret"].drop_nulls().drop_nans()
         mean_return = eq_ret.mean()
         std_return = eq_ret.std()
         if std_return is None or std_return == 0.0:
-            self.report.append(ReportItem("sharpe", 0.0, importance, "metric"))
+            self.report.append(ReportItem("sharpe", 0.0, cfg.importance, "metric"))
             return
 
         self.report.append(
@@ -235,71 +307,74 @@ class Metrics:
                 "sharpe",
                 self._round_metric(
                     mean_return / std_return * self.periods_per_year ** 0.5,
-                    decimals,
+                    cfg.decimals,
                 ),
-                importance,
+                cfg.importance,
                 "metric",
             )
         )
 
     def max_drawdown(self) -> None:
         """Add max drawdown in notional and percentage terms."""
-        enabled, decimals, importance = self.config.max_drawdown
-        if not enabled:
+        cfg = self.config.max_drawdown
+        if not cfg.enabled:
             return
 
         self.report.append(
             ReportItem(
                 "max_dd_not",
-                self._round_metric(self.equity["dd_not"].min(), decimals),
-                importance,
+                self._round_metric(self.equity["dd_not"].min(), cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
         self.report.append(
             ReportItem(
                 "max_dd_pct",
-                self._round_metric(self.equity["dd_pct"].min() * 100.0, decimals),
-                importance,
+                self._round_metric(self.equity["dd_pct"].min() * 100.0, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
 
     def skewness(self) -> None:
         """Add skewness of percentage returns."""
-        enabled, decimals, importance = self.config.skewness
-        if not enabled:
+        cfg = self.config.skewness
+        if not cfg.enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
         self.report.append(
             ReportItem(
                 "return_skewness",
-                self._round_metric(value, decimals),
-                importance,
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
 
     def kurtosis(self) -> None:
         """Add excess kurtosis of percentage returns."""
-        enabled, decimals, importance = self.config.kurtosis
-        if not enabled:
+        cfg = self.config.kurtosis
+        if not cfg.enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
         self.report.append(
             ReportItem(
                 "return_kurtosis",
-                self._round_metric(value, decimals),
-                importance,
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
                 "metric",
             )
         )
 
     def plot_equity_curve(self, tick_count: int = 8) -> None:
         """Save an equity curve plot using the equity timestamps as the x-axis."""
-        dd_cfg, figsize_x, figsize_y, importance = self.config.plot_equity_curve_cfg
+        cfg = self.config.plot_equity_curve_cfg
+        base_cfg = cfg.base
+        if not base_cfg.enabled:
+            return
 
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
@@ -308,19 +383,19 @@ class Metrics:
         ]
 
         plot_rows = 1
-        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.DD_PCT}:
+        if cfg.dd_mode in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.DD_PCT}:
             plot_rows = 2
-        elif dd_cfg == DRAWDOWN_PLOT_MODE.ALL:
+        elif cfg.dd_mode == DRAWDOWN_PLOT_MODE.ALL:
             plot_rows = 3
 
-        eq_height = figsize_y
+        eq_height = base_cfg.figsize_y
         dd_height = eq_height * 0.6
         height_ratios = [eq_height] + [dd_height] * (plot_rows - 1)
 
         fig, axes = plt.subplots(
             plot_rows,
             1,
-            figsize=(figsize_x, sum(height_ratios)),
+            figsize=(base_cfg.figsize_x, sum(height_ratios)),
             gridspec_kw={"height_ratios": height_ratios},
             sharex=True,
         )
@@ -334,7 +409,7 @@ class Metrics:
         equity_ax.grid(True, alpha=0.3)
 
         row = 1
-        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.ALL}:
+        if cfg.dd_mode in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.ALL}:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
@@ -344,7 +419,7 @@ class Metrics:
             )
             row += 1
 
-        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_PCT, DRAWDOWN_PLOT_MODE.ALL}:
+        if cfg.dd_mode in {DRAWDOWN_PLOT_MODE.DD_PCT, DRAWDOWN_PLOT_MODE.ALL}:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
@@ -362,7 +437,7 @@ class Metrics:
         plt.close(fig)
 
         self.report.append(
-            ReportItem("equity_curve_plot", str(out_path), importance, "plot")
+            ReportItem("equity_curve_plot", str(out_path), base_cfg.importance, "plot")
         )
 
     def _plot_drawdown_axis(

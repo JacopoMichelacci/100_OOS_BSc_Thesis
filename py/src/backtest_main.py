@@ -4,7 +4,14 @@ import subprocess
 import sys
 from time import perf_counter
 
-from report.report_metrics import DRAWDOWN_PLOT_MODE, Metrics, MetricsConfig, ReportItem
+from report.report_metrics import (
+    DRAWDOWN_PLOT_MODE,
+    EquityCurvePlotConfig,
+    Metrics,
+    MetricsConfig,
+    PlotConfig,
+    ReportItem,
+)
 
 
 REPORT_DIR = Path("output/backtest")
@@ -17,11 +24,13 @@ REPORT_PDF_PATH = REPORT_DIR / "report.pdf"
 REPORT_CSS_PATH = Path("py/src/report/report_style.css")
 
 PCT_METRICS = {
-    "mean_return_pct",
+    "tot_ret_pct",
+    "mean_yearly_ret_pct",
     "max_dd_pct",
 }
 NOTIONAL_METRICS = {
-    "mean_return_notional",
+    "tot_ret_not",
+    "mean_yearly_ret_not",
     "net_profit",
     "avg_trade",
     "max_dd_not",
@@ -172,7 +181,10 @@ def main() -> None:
         EQUITY_PATH,
         ORDERS_PATH,
         MetricsConfig(
-            plot_equity_curve_cfg=(DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8, 1),
+            plot_equity_curve_cfg=EquityCurvePlotConfig(
+                base=PlotConfig(),
+                dd_mode=DRAWDOWN_PLOT_MODE.ALL,
+            ),
         ),
         ASSETS_DIR,
     )
