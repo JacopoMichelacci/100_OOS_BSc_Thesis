@@ -20,7 +20,7 @@ class MetricsConfig:
     max_drawdown: MetricConfig = (True, 1)
     skewness: MetricConfig = (True, 2)
     kurtosis: MetricConfig = (True, 2)
-    plot_equity_curve_cfg: tuple[str, float, float] = ("all", 10.0, 4)
+    plot_equity_curve_cfg: tuple[str, float, float] = ("all", 12.0, 4.8)
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 

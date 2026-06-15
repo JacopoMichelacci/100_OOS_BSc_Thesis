@@ -16,9 +16,9 @@ enum class TIMER_TYPE : std::int8_t {
 };
 inline std::ostream& operator<<(std::ostream& os, TIMER_TYPE type) {
     switch (type) {
-        case (TIMER_TYPE::MILLISECONDS): return os << "milliseconds";
-        case (TIMER_TYPE::MICROSECONDS): return os << "microseconds";
-        case (TIMER_TYPE::NANOSECONDS): return os << "nanoseconds";
+        case (TIMER_TYPE::MILLISECONDS): return os << "ms";
+        case (TIMER_TYPE::MICROSECONDS): return os << "us";
+        case (TIMER_TYPE::NANOSECONDS): return os << "ns";
     }
 
     return os << "unknown";
@@ -29,22 +29,29 @@ class Timer {
 public:
 
     Timer(TIMER_TYPE time_measure_type) 
-        : start_(std::chrono::steady_clock::now()), time_measure_type_(time_measure_type) {}
+        : time_measure_type_(time_measure_type) {}
 
 
     inline void start() {
         start_ = std::chrono::steady_clock::now();
+        running_ = true;
     }
 
     inline long long end() {
+        if (!running_) {
+            throw std::logic_error("Timer::end() called before Timer::start().");
+        }
+
         end_ = std::chrono::steady_clock::now();
 
         acc_time_ += time_measure_();
+        running_ = false;
         return acc_time_;   
     }
 
     inline void reset() {
         acc_time_ = 0;
+        running_ = false;
     }
 
     inline void print(std::string_view msg = "") const {
@@ -77,6 +84,7 @@ private:
     std::chrono::steady_clock::time_point start_;                   // start time of timer, = ::now()
     std::chrono::steady_clock::time_point end_;                     // end time of timer, = ::now()
     long long acc_time_ = 0;                                        // stores accumulated time for the timer
+    bool running_ = false;                                          // true after start() until end()
 
 
     inline long long time_measure_() {

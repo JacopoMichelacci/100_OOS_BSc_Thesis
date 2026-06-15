@@ -4,6 +4,7 @@
 #include <string>
 
 #include "utils/csv_loader.hpp"
+#include "utils/timer.hpp"
 #include "core/market_events.hpp"
 
 
@@ -13,6 +14,9 @@
 
 
 int main() {
+    Timer timer(TIMER_TYPE::MILLISECONDS);
+    timer.start();
+
     // 1. load data
     const std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
     auto data = load_csv<OHLCVEvent>(data_path);
@@ -39,6 +43,9 @@ int main() {
     // Export raw results for Python reporting/plotting.
     write_backtest_metadata(strat.get_name(), data_path, "output/backtest/_assets");
     write_backtest_results(data, results, "output/backtest/_assets");
+
+    timer.end();
+    timer.print("backtest runtime: ");
 
     return 0;
 }
