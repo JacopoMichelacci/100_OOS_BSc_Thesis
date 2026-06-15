@@ -1,4 +1,4 @@
-// cpp/backtest/main.cpp
+// cpp/backtest_main.cpp
 
 #include <iostream>
 #include <string>
@@ -30,10 +30,12 @@ int main() {
     });
 
     // 3. set up backtester
-    Backtester<OHLCVEvent> bt(BacktestConfig{
+    BacktestConfig bt_config{
         .initial_capital = 100'000.0,
-        .cost_bps = 3.0
-    });
+        .cost_bps = 3.0,
+        .currency = "USD"
+    };
+    Backtester<OHLCVEvent> bt(bt_config);
 
     // 4. run
     auto results = bt.run(strat, data);
@@ -41,7 +43,13 @@ int main() {
               << ", n orders: " << results.hlog.size() << "\n\n";
 
     // Export raw results for Python reporting/plotting.
-    write_backtest_metadata(strat.get_name(), data_path, "output/backtest/_assets");
+    write_backtest_metadata(
+        strat.get_name(),
+        data_path,
+        bt_config.cost_bps,
+        bt_config.currency,
+        "output/backtest/_assets"
+    );
     write_backtest_results(data, results, "output/backtest/_assets");
 
     timer.end();

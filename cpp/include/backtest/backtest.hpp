@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <vector>
 #include <span>
 
@@ -16,6 +17,7 @@ struct BacktestResults {
 struct BacktestConfig {
     double initial_capital = 100'000.0;
     double cost_bps = 3.0;
+    std::string currency = "USD";
 };
 
 template <typename Tin>

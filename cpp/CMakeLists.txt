@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_executable(
     ${PROJECT_NAME}
-    backtest/main.cpp
+    backtest_main.cpp
     src/core/market_events.cpp
     src/core/order_events.cpp
 )

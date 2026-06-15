@@ -14,6 +14,8 @@
 inline void write_backtest_metadata(
     std::string_view strat_name,
     const std::string& data_path,
+    double cost_bps = 0.0,
+    std::string_view currency = "$",
     const std::string& out_dir = "output/backtest/_assets"
 ) {
     // Keep run metadata beside the generated data assets.
@@ -31,7 +33,8 @@ inline void write_backtest_metadata(
     metadata_out << "key,value\n";
     metadata_out << "strat_name," << strat_name << "\n";
     metadata_out << "data," << data_name << "\n";
-    metadata_out << "currency,$\n";
+    metadata_out << "currency," << currency << "\n";
+    metadata_out << "cost_bps," << cost_bps << "\n";
 }
 
 template <typename Tin>

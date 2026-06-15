@@ -23,6 +23,13 @@ REPORT_MD_PATH = REPORT_DIR / "report.md"
 REPORT_PDF_PATH = REPORT_DIR / "report.pdf"
 REPORT_CSS_PATH = Path("py/src/report/report_style.css")
 
+CURRENCY_SYMBOLS = {
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "JPY": "¥",
+}
+
 PCT_METRICS = {
     "tot_ret_pct",
     "mean_yearly_ret_pct",
@@ -60,12 +67,12 @@ def _format_notional_value(value: float | int | str, currency: str) -> str:
     return f"{currency}{formatted}"
 
 
-def _format_metric(item: ReportItem, currency: str) -> tuple[str, str]:
+def _format_metric(item: ReportItem, currency_symbol: str) -> tuple[str, str]:
     if item.name in PCT_METRICS:
         return item.name, f"{_format_value(item.value)}%"
 
     if item.name in NOTIONAL_METRICS:
-        return item.name, _format_notional_value(item.value, currency)
+        return item.name, _format_notional_value(item.value, currency_symbol)
 
     return item.name, _format_value(item.value)
 
@@ -77,6 +84,19 @@ def resolve_currency(metadata: dict[str, str]) -> str:
 
     print("metadata currency missing; defaulting report currency to $")
     return "$"
+
+
+def currency_symbol(currency: str) -> str:
+    return CURRENCY_SYMBOLS.get(currency.upper(), currency)
+
+
+def resolve_cost_bps(metadata: dict[str, str]) -> str:
+    cost_bps = metadata.get("cost_bps", "").strip()
+    if cost_bps:
+        return cost_bps
+
+    print("metadata cost_bps missing; defaulting report cost_bps to 0")
+    return "0"
 
 
 def read_metadata() -> dict[str, str]:
@@ -99,6 +119,8 @@ def write_markdown_report(
 ) -> None:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     currency = resolve_currency(metadata)
+    currency_symbol_ = currency_symbol(currency)
+    cost_bps = resolve_cost_bps(metadata)
 
     lines = [
         "# Backtest Report",
@@ -110,7 +132,8 @@ def write_markdown_report(
         "|---|---|",
         f"| Strategy | {metadata.get('strat_name', '')} |",
         f"| Data | {metadata.get('data', '')} |",
-        f"| Currency | {_markdown_currency(currency)} |",
+        f"| Currency | {currency} ({_markdown_currency(currency_symbol_)}) |",
+        f"| Cost per trade | {cost_bps} bps |",
         "",
         "</div>",
         "",
@@ -140,7 +163,7 @@ def write_markdown_report(
         if metrics:
             lines.extend(["", f"## {section_title}", "", "| Metric | Value |", "|---|---:|"])
             for item in metrics:
-                metric_name, metric_value = _format_metric(item, currency)
+                metric_name, metric_value = _format_metric(item, currency_symbol_)
                 lines.append(f"| `{metric_name}` | {metric_value} |")
 
     REPORT_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
