@@ -4,7 +4,7 @@ import subprocess
 import sys
 from time import perf_counter
 
-from report.report_metrics import Metrics, MetricsConfig
+from report.report_metrics import DRAWDOWN_PLOT_MODE, Metrics, MetricsConfig, ReportItem
 
 
 REPORT_DIR = Path("output/backtest")
@@ -16,12 +16,58 @@ REPORT_MD_PATH = REPORT_DIR / "report.md"
 REPORT_PDF_PATH = REPORT_DIR / "report.pdf"
 REPORT_CSS_PATH = Path("py/src/report/report_style.css")
 
+PCT_METRICS = {
+    "mean_return_pct",
+    "max_dd_pct",
+}
+NOTIONAL_METRICS = {
+    "mean_return_notional",
+    "net_profit",
+    "avg_trade",
+    "max_dd_not",
+}
+
 
 def _format_value(value: float | int | str) -> str:
     if isinstance(value, float):
         return f"{value:.6g}"
 
     return str(value)
+
+
+def _markdown_currency(currency: str) -> str:
+    if currency == "$":
+        return r"\$"
+
+    return currency
+
+
+def _format_notional_value(value: float | int | str, currency: str) -> str:
+    formatted = _format_value(value)
+    currency = _markdown_currency(currency)
+    if formatted.startswith("-"):
+        return f"-{currency}{formatted[1:]}"
+
+    return f"{currency}{formatted}"
+
+
+def _format_metric(item: ReportItem, currency: str) -> tuple[str, str]:
+    if item.name in PCT_METRICS:
+        return item.name, f"{_format_value(item.value)}%"
+
+    if item.name in NOTIONAL_METRICS:
+        return item.name, _format_notional_value(item.value, currency)
+
+    return item.name, _format_value(item.value)
+
+
+def resolve_currency(metadata: dict[str, str]) -> str:
+    currency = metadata.get("currency", "").strip()
+    if currency:
+        return currency
+
+    print("metadata currency missing; defaulting report currency to $")
+    return "$"
 
 
 def read_metadata() -> dict[str, str]:
@@ -39,31 +85,54 @@ def read_metadata() -> dict[str, str]:
 
 
 def write_markdown_report(
-    report: dict[str, float | int | str],
+    report: list[ReportItem],
     metadata: dict[str, str],
 ) -> None:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    currency = resolve_currency(metadata)
 
     lines = [
         "# Backtest Report",
         "",
         "## Metadata",
+        '<div class="metadata-table">',
+        "",
         "| Field | Value |",
         "|---|---|",
         f"| Strategy | {metadata.get('strat_name', '')} |",
         f"| Data | {metadata.get('data', '')} |",
+        f"| Currency | {_markdown_currency(currency)} |",
         "",
-        "![Equity Curve](_assets/equity_curve.png)",
+        "</div>",
         "",
-        "## Metrics",
-        "| Metric | Value |",
-        "|---|---:|",
     ]
 
-    for key, value in report.items():
-        if key.endswith("_plot"):
-            continue
-        lines.append(f"| `{key}` | {_format_value(value)} |")
+    importance_levels = sorted(
+        {item.importance for item in report},
+    )
+    for section_idx, importance in enumerate(importance_levels):
+        plots = [
+            item for item in report
+            if item.importance == importance and item.kind == "plot"
+        ]
+        metrics = [
+            item for item in report
+            if item.importance == importance and item.kind == "metric"
+        ]
+
+        section_title = "Key Metrics" if section_idx == 0 else "Metrics"
+
+        for item in plots:
+            plot_path = Path(str(item.value))
+            if plot_path.is_relative_to(REPORT_DIR):
+                plot_path = plot_path.relative_to(REPORT_DIR)
+            lines.extend(["", f"**{item.name}**", "", f"![]({plot_path})"])
+
+        if metrics:
+            lines.extend(["", f"## {section_title}", "", "| Metric | Value |", "|---|---:|"])
+            for item in metrics:
+                metric_name, metric_value = _format_metric(item, currency)
+                lines.append(f"| `{metric_name}` | {metric_value} |")
 
     REPORT_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
 
@@ -102,7 +171,9 @@ def main() -> None:
     metrics = Metrics(
         EQUITY_PATH,
         ORDERS_PATH,
-        MetricsConfig(),
+        MetricsConfig(
+            plot_equity_curve_cfg=(DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8, 1),
+        ),
         ASSETS_DIR,
     )
     report = metrics.run()
@@ -111,7 +182,7 @@ def main() -> None:
     write_pdf_report()
 
     runtime_ms = (perf_counter() - start) * 1000
-    print(f"report runtime: {runtime_ms:.0f}ms")
+    print(f"\nreport runtime: {runtime_ms:.0f}ms")
 
 
 if __name__ == "__main__":

@@ -31,6 +31,7 @@ inline void write_backtest_metadata(
     metadata_out << "key,value\n";
     metadata_out << "strat_name," << strat_name << "\n";
     metadata_out << "data," << data_name << "\n";
+    metadata_out << "currency,$\n";
 }
 
 template <typename Tin>

@@ -2,6 +2,7 @@ from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 import matplotlib
 matplotlib.use("Agg")
@@ -9,8 +10,8 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 
-MetricConfig = tuple[bool, int]
-EquityCurvePlotConfig = tuple["DRAWDOWN_PLOT_MODE", float, float]
+MetricConfig = tuple[bool, int, int]
+PlotConfig = tuple["DRAWDOWN_PLOT_MODE", float, float, int]
 
 
 class DRAWDOWN_PLOT_MODE(Enum):
@@ -23,16 +24,26 @@ class DRAWDOWN_PLOT_MODE(Enum):
 
 
 @dataclass(frozen=True)
+class ReportItem:
+    """One layout-aware report entry produced by Metrics.run()."""
+
+    name: str
+    value: float | int | str
+    importance: int
+    kind: Literal["metric", "plot"]
+
+
+@dataclass(frozen=True)
 class MetricsConfig:
     """Controls which metrics/assets are produced by Metrics.run()."""
 
-    mean_returns: MetricConfig = (True, 2)
-    avg_trade: MetricConfig = (True, 1)
-    sharpe: MetricConfig = (True, 2)
-    max_drawdown: MetricConfig = (True, 1)
-    skewness: MetricConfig = (True, 2)
-    kurtosis: MetricConfig = (True, 2)
-    plot_equity_curve_cfg: EquityCurvePlotConfig = (DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8)
+    mean_returns: MetricConfig = (True, 2, 1)
+    avg_trade: MetricConfig = (True, 1, 1)
+    sharpe: MetricConfig = (True, 2, 1)
+    max_drawdown: MetricConfig = (True, 1, 1)
+    skewness: MetricConfig = (True, 2, 2)
+    kurtosis: MetricConfig = (True, 2, 2)
+    plot_equity_curve_cfg: PlotConfig = (DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8, 1)
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
@@ -66,7 +77,7 @@ class Metrics:
         self._add_equity_columns()
         self.periods_per_year = self._resolve_periods_per_year()
 
-        self.report: dict[str, float | int | str] = {}
+        self.report: list[ReportItem] = []
 
     def _clean_equity(self) -> None:
         """Drop invalid rows from the in-memory equity curve only."""
@@ -120,7 +131,7 @@ class Metrics:
         year_ms = self.config.trading_days_inferred * 24 * 60 * 60 * 1000
         return year_ms / median_diff_ms
 
-    def run(self) -> dict[str, float | int | str]:
+    def run(self) -> list[ReportItem]:
         """Run enabled metrics and return the collected report values."""
         self.mean_returns()
         self.avg_trade()
@@ -141,30 +152,55 @@ class Metrics:
 
     def mean_returns(self) -> None:
         """Add average percentage and notional equity returns to the report."""
-        enabled, decimals = self.config.mean_returns
+        enabled, decimals, importance = self.config.mean_returns
         if not enabled:
             return
 
         mean_return_pct = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * 100.0
         mean_return_notional = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean()
 
-        self.report["mean_return_pct"] = self._round_metric(mean_return_pct, decimals)
-        self.report["mean_return_notional"] = self._round_metric(mean_return_notional, decimals)
+        self.report.append(
+            ReportItem(
+                "mean_return_pct",
+                self._round_metric(mean_return_pct, decimals),
+                importance,
+                "metric",
+            )
+        )
+        self.report.append(
+            ReportItem(
+                "mean_return_notional",
+                self._round_metric(mean_return_notional, decimals),
+                importance,
+                "metric",
+            )
+        )
 
     def avg_trade(self) -> None:
         """Add net profit, trade count, and average profit per filled order."""
-        enabled, decimals = self.config.avg_trade
+        enabled, decimals, importance = self.config.avg_trade
         if not enabled:
             return
 
         n_trades = self._filled_order_count()
         net_profit = self._net_profit()
 
-        self.report["n_trades"] = n_trades
-        self.report["net_profit"] = self._round_metric(net_profit, decimals)
-        self.report["avg_trade"] = self._round_metric(
-            net_profit / n_trades if n_trades else 0.0,
-            decimals,
+        self.report.append(ReportItem("n_trades", n_trades, importance, "metric"))
+        self.report.append(
+            ReportItem(
+                "net_profit",
+                self._round_metric(net_profit, decimals),
+                importance,
+                "metric",
+            )
+        )
+        self.report.append(
+            ReportItem(
+                "avg_trade",
+                self._round_metric(net_profit / n_trades if n_trades else 0.0, decimals),
+                importance,
+                "metric",
+            )
         )
 
     def _filled_order_count(self) -> int:
@@ -183,7 +219,7 @@ class Metrics:
 
     def sharpe(self) -> None:
         """Add annualized Sharpe based on inferred or overridden periods per year."""
-        enabled, decimals = self.config.sharpe
+        enabled, decimals, importance = self.config.sharpe
         if not enabled:
             return
 
@@ -191,44 +227,79 @@ class Metrics:
         mean_return = eq_ret.mean()
         std_return = eq_ret.std()
         if std_return is None or std_return == 0.0:
-            self.report["sharpe"] = 0.0
+            self.report.append(ReportItem("sharpe", 0.0, importance, "metric"))
             return
 
-        self.report["sharpe"] = self._round_metric(
-            mean_return / std_return * self.periods_per_year ** 0.5,
-            decimals,
+        self.report.append(
+            ReportItem(
+                "sharpe",
+                self._round_metric(
+                    mean_return / std_return * self.periods_per_year ** 0.5,
+                    decimals,
+                ),
+                importance,
+                "metric",
+            )
         )
 
     def max_drawdown(self) -> None:
         """Add max drawdown in notional and percentage terms."""
-        enabled, decimals = self.config.max_drawdown
+        enabled, decimals, importance = self.config.max_drawdown
         if not enabled:
             return
 
-        self.report["max_dd_not"] = self._round_metric(self.equity["dd_not"].min(), decimals)
-        self.report["max_dd_pct"] = self._round_metric(self.equity["dd_pct"].min() * 100.0, decimals)
+        self.report.append(
+            ReportItem(
+                "max_dd_not",
+                self._round_metric(self.equity["dd_not"].min(), decimals),
+                importance,
+                "metric",
+            )
+        )
+        self.report.append(
+            ReportItem(
+                "max_dd_pct",
+                self._round_metric(self.equity["dd_pct"].min() * 100.0, decimals),
+                importance,
+                "metric",
+            )
+        )
 
     def skewness(self) -> None:
         """Add skewness of percentage returns."""
-        enabled, decimals = self.config.skewness
+        enabled, decimals, importance = self.config.skewness
         if not enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
-        self.report["return_skewness"] = self._round_metric(value, decimals)
+        self.report.append(
+            ReportItem(
+                "return_skewness",
+                self._round_metric(value, decimals),
+                importance,
+                "metric",
+            )
+        )
 
     def kurtosis(self) -> None:
         """Add excess kurtosis of percentage returns."""
-        enabled, decimals = self.config.kurtosis
+        enabled, decimals, importance = self.config.kurtosis
         if not enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
-        self.report["return_kurtosis"] = self._round_metric(value, decimals)
+        self.report.append(
+            ReportItem(
+                "return_kurtosis",
+                self._round_metric(value, decimals),
+                importance,
+                "metric",
+            )
+        )
 
     def plot_equity_curve(self, tick_count: int = 8) -> None:
         """Save an equity curve plot using the equity timestamps as the x-axis."""
-        dd_cfg, figsize_x, figsize_y = self.config.plot_equity_curve_cfg
+        dd_cfg, figsize_x, figsize_y, importance = self.config.plot_equity_curve_cfg
 
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
@@ -290,7 +361,9 @@ class Metrics:
         fig.savefig(out_path, dpi=150)
         plt.close(fig)
 
-        self.report["equity_curve_plot"] = str(out_path)
+        self.report.append(
+            ReportItem("equity_curve_plot", str(out_path), importance, "plot")
+        )
 
     def _plot_drawdown_axis(
         self,
