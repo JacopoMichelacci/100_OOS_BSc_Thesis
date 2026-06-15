@@ -8,18 +8,19 @@ import matplotlib.pyplot as plt
 import polars as pl
 
 
+MetricConfig = tuple[bool, int]
+
 @dataclass(frozen=True)
 class MetricsConfig:
     """Controls which metrics/assets are produced by Metrics.run()."""
 
-    mean_returns: bool = True
-    avg_trade: bool = True
-    sharpe: bool = True
-    max_drawdown: bool = True
-    skewness: bool = True
-    kurtosis: bool = True
-    equity_curve_plot: bool = True
-    plot_equity_curve_cfg: str = "all"
+    mean_returns: MetricConfig = (True, 2)
+    avg_trade: MetricConfig = (True, 1)
+    sharpe: MetricConfig = (True, 2)
+    max_drawdown: MetricConfig = (True, 1)
+    skewness: MetricConfig = (True, 2)
+    kurtosis: MetricConfig = (True, 2)
+    plot_equity_curve_cfg: tuple[str, float, float] = ("all", 10.0, 4)
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
@@ -119,25 +120,40 @@ class Metrics:
 
         return self.report
 
+    def _round_metric(self, value: float | int | None, decimals: int) -> float:
+        """Round a scalar metric while normalizing missing values to zero."""
+        if value is None:
+            return 0.0
+
+        return round(float(value), decimals)
+
     def mean_returns(self) -> None:
         """Add average percentage and notional equity returns to the report."""
-        if not self.config.mean_returns:
+        enabled, decimals = self.config.mean_returns
+        if not enabled:
             return
 
-        self.report["mean_return_pct"] = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * 100.0
-        self.report["mean_return_notional"] = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean()
+        mean_return_pct = self.equity["eq_ret"].drop_nulls().drop_nans().mean() * 100.0
+        mean_return_notional = self.equity["eq_ret_not"].drop_nulls().drop_nans().mean()
+
+        self.report["mean_return_pct"] = self._round_metric(mean_return_pct, decimals)
+        self.report["mean_return_notional"] = self._round_metric(mean_return_notional, decimals)
 
     def avg_trade(self) -> None:
         """Add net profit, trade count, and average profit per filled order."""
-        if not self.config.avg_trade:
+        enabled, decimals = self.config.avg_trade
+        if not enabled:
             return
 
         n_trades = self._filled_order_count()
         net_profit = self._net_profit()
 
         self.report["n_trades"] = n_trades
-        self.report["net_profit"] = net_profit
-        self.report["avg_trade"] = net_profit / n_trades if n_trades else 0.0
+        self.report["net_profit"] = self._round_metric(net_profit, decimals)
+        self.report["avg_trade"] = self._round_metric(
+            net_profit / n_trades if n_trades else 0.0,
+            decimals,
+        )
 
     def _filled_order_count(self) -> int:
         """Count filled orders from the order log."""
@@ -155,7 +171,8 @@ class Metrics:
 
     def sharpe(self) -> None:
         """Add annualized Sharpe based on inferred or overridden periods per year."""
-        if not self.config.sharpe:
+        enabled, decimals = self.config.sharpe
+        if not enabled:
             return
 
         eq_ret = self.equity["eq_ret"].drop_nulls().drop_nans()
@@ -165,40 +182,42 @@ class Metrics:
             self.report["sharpe"] = 0.0
             return
 
-        self.report["sharpe"] = (
-            mean_return / std_return * self.periods_per_year ** 0.5
+        self.report["sharpe"] = self._round_metric(
+            mean_return / std_return * self.periods_per_year ** 0.5,
+            decimals,
         )
 
     def max_drawdown(self) -> None:
         """Add max drawdown in notional and percentage terms."""
-        if not self.config.max_drawdown:
+        enabled, decimals = self.config.max_drawdown
+        if not enabled:
             return
 
-        self.report["max_dd_not"] = self.equity["dd_not"].min()
-        self.report["max_dd_pct"] = self.equity["dd_pct"].min() * 100.0
+        self.report["max_dd_not"] = self._round_metric(self.equity["dd_not"].min(), decimals)
+        self.report["max_dd_pct"] = self._round_metric(self.equity["dd_pct"].min() * 100.0, decimals)
 
     def skewness(self) -> None:
         """Add skewness of percentage returns."""
-        if not self.config.skewness:
+        enabled, decimals = self.config.skewness
+        if not enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
-        self.report["return_skewness"] = 0.0 if value is None else value
+        self.report["return_skewness"] = self._round_metric(value, decimals)
 
     def kurtosis(self) -> None:
         """Add excess kurtosis of percentage returns."""
-        if not self.config.kurtosis:
+        enabled, decimals = self.config.kurtosis
+        if not enabled:
             return
 
         value = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
-        self.report["return_kurtosis"] = 0.0 if value is None else value
+        self.report["return_kurtosis"] = self._round_metric(value, decimals)
 
     def plot_equity_curve(self, tick_count: int = 8) -> None:
         """Save an equity curve plot using the equity timestamps as the x-axis."""
-        if not self.config.equity_curve_plot:
-            return
-
-        dd_cfg = self._validate_equity_curve_dd_cfg(self.config.plot_equity_curve_cfg)
+        dd_cfg, figsize_x, figsize_y = self.config.plot_equity_curve_cfg
+        dd_cfg = self._validate_equity_curve_dd_cfg(dd_cfg)
 
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
@@ -212,10 +231,15 @@ class Metrics:
         elif dd_cfg == "all":
             plot_rows = 3
 
+        eq_height = figsize_y
+        dd_height = eq_height * 2.0 / 3.0
+        height_ratios = [eq_height] + [dd_height] * (plot_rows - 1)
+
         fig, axes = plt.subplots(
             plot_rows,
             1,
-            figsize=(10, 3.2 * plot_rows),
+            figsize=(figsize_x, sum(height_ratios)),
+            gridspec_kw={"height_ratios": height_ratios},
             sharex=True,
         )
         if plot_rows == 1:
