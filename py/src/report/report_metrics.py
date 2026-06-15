@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass
+from enum import Enum
 
 import matplotlib
 matplotlib.use("Agg")
@@ -9,6 +10,17 @@ import polars as pl
 
 
 MetricConfig = tuple[bool, int]
+EquityCurvePlotConfig = tuple["DRAWDOWN_PLOT_MODE", float, float]
+
+
+class DRAWDOWN_PLOT_MODE(Enum):
+    """Controls which drawdown panels are included under the equity curve."""
+
+    CLEAN = "clean"
+    DD_PCT = "dd_pct"
+    DD_NOT = "dd_not"
+    ALL = "all"
+
 
 @dataclass(frozen=True)
 class MetricsConfig:
@@ -20,7 +32,7 @@ class MetricsConfig:
     max_drawdown: MetricConfig = (True, 1)
     skewness: MetricConfig = (True, 2)
     kurtosis: MetricConfig = (True, 2)
-    plot_equity_curve_cfg: tuple[str, float, float] = ("all", 12.0, 4.8)
+    plot_equity_curve_cfg: EquityCurvePlotConfig = (DRAWDOWN_PLOT_MODE.ALL, 12.0, 4.8)
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
@@ -217,7 +229,6 @@ class Metrics:
     def plot_equity_curve(self, tick_count: int = 8) -> None:
         """Save an equity curve plot using the equity timestamps as the x-axis."""
         dd_cfg, figsize_x, figsize_y = self.config.plot_equity_curve_cfg
-        dd_cfg = self._validate_equity_curve_dd_cfg(dd_cfg)
 
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
@@ -226,13 +237,13 @@ class Metrics:
         ]
 
         plot_rows = 1
-        if dd_cfg in {"ddnot", "ddpct"}:
+        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.DD_PCT}:
             plot_rows = 2
-        elif dd_cfg == "all":
+        elif dd_cfg == DRAWDOWN_PLOT_MODE.ALL:
             plot_rows = 3
 
         eq_height = figsize_y
-        dd_height = eq_height * 2.0 / 3.0
+        dd_height = eq_height * 0.6
         height_ratios = [eq_height] + [dd_height] * (plot_rows - 1)
 
         fig, axes = plt.subplots(
@@ -252,7 +263,7 @@ class Metrics:
         equity_ax.grid(True, alpha=0.3)
 
         row = 1
-        if dd_cfg in {"ddnot", "all"}:
+        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_NOT, DRAWDOWN_PLOT_MODE.ALL}:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
@@ -262,7 +273,7 @@ class Metrics:
             )
             row += 1
 
-        if dd_cfg in {"ddpct", "all"}:
+        if dd_cfg in {DRAWDOWN_PLOT_MODE.DD_PCT, DRAWDOWN_PLOT_MODE.ALL}:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
@@ -280,16 +291,6 @@ class Metrics:
         plt.close(fig)
 
         self.report["equity_curve_plot"] = str(out_path)
-
-    def _validate_equity_curve_dd_cfg(self, dd_cfg: str) -> str:
-        """Validate drawdown subplot mode for the equity curve plot."""
-        valid = {"clean", "ddpct", "ddnot", "all"}
-        if dd_cfg not in valid:
-            raise ValueError(
-                f"invalid equity_curve_dd_cfg {dd_cfg!r}; expected one of {sorted(valid)}"
-            )
-
-        return dd_cfg
 
     def _plot_drawdown_axis(
         self,

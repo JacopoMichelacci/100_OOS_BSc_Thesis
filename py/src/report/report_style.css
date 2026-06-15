@@ -1,0 +1,45 @@
+@page {
+    margin: 12mm 12mm;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10pt;
+    color: #202020;
+}
+
+h1 {
+    margin: 0 0 6mm;
+    font-size: 18pt;
+    font-weight: 700;
+}
+
+h2 {
+    margin: 6mm 0 2mm;
+    font-size: 12pt;
+    font-weight: 700;
+}
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0 0 5mm;
+}
+
+th,
+td {
+    border-bottom: 0.2mm solid #d0d0d0;
+    padding: 1.5mm 2mm;
+}
+
+th {
+    text-align: left;
+    background: #f4f4f4;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+    margin: 3mm 0 5mm;
+}

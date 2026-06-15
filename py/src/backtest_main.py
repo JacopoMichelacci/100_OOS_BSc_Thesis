@@ -4,7 +4,7 @@ import subprocess
 import sys
 from time import perf_counter
 
-from metrics.report_metrics import Metrics, MetricsConfig
+from report.report_metrics import Metrics, MetricsConfig
 
 
 REPORT_DIR = Path("output/backtest")
@@ -14,6 +14,7 @@ ORDERS_PATH = ASSETS_DIR / "orders.csv"
 METADATA_PATH = ASSETS_DIR / "metadata.csv"
 REPORT_MD_PATH = REPORT_DIR / "report.md"
 REPORT_PDF_PATH = REPORT_DIR / "report.pdf"
+REPORT_CSS_PATH = Path("py/src/report/report_style.css")
 
 
 def _format_value(value: float | int | str) -> str:
@@ -81,6 +82,8 @@ def write_pdf_report() -> None:
             "-o",
             REPORT_PDF_PATH.name,
             "--pdf-engine=weasyprint",
+            "--css",
+            str(REPORT_CSS_PATH.resolve()),
             "--quiet",
         ],
         cwd=REPORT_DIR,
@@ -108,7 +111,7 @@ def main() -> None:
     write_pdf_report()
 
     runtime_ms = (perf_counter() - start) * 1000
-    print(f"report runtime: {runtime_ms}milliseconds\n")
+    print(f"report runtime: {runtime_ms:.0f}ms")
 
 
 if __name__ == "__main__":
