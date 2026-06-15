@@ -14,5 +14,6 @@ dependencies = [
     "pybind11>=3.0.4",
     "quantolib>=0.0.12",
     "tqdm>=4.67.3",
+    "weasyprint>=69.0",
     "yfinance>=1.4.1",
 ]
