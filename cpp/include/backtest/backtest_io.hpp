@@ -6,9 +6,32 @@
 #include <iostream>
 #include <span>
 #include <string>
+#include <string_view>
 
 #include "backtest/backtest.hpp"
 #include "utils/time.hpp"
+
+inline void write_backtest_metadata(
+    std::string_view strat_name,
+    const std::string& data_path,
+    const std::string& out_dir = "output/backtest/_assets"
+) {
+    // Keep run metadata beside the generated data assets.
+    std::filesystem::create_directories(out_dir);
+
+    const auto metadata_path = out_dir + "/metadata.csv";
+    std::ofstream metadata_out(metadata_path);
+    if (!metadata_out) {
+        std::cerr << "write_backtest_metadata: could not open " << metadata_path << "\n";
+        return;
+    }
+
+    const auto data_name = std::filesystem::path(data_path).stem().string();
+
+    metadata_out << "key,value\n";
+    metadata_out << "strat_name," << strat_name << "\n";
+    metadata_out << "data," << data_name << "\n";
+}
 
 template <typename Tin>
 void write_backtest_results(

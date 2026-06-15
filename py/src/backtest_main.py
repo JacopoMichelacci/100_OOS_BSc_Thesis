@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-from report_metrics import Metrics, MetricsConfig
+from metrics.report_metrics import Metrics, MetricsConfig
 
 
 REPORT_DIR = Path("output/backtest")
