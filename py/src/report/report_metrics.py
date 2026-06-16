@@ -19,6 +19,14 @@ class DRAWDOWN_PLOT_MODE(Enum):
     DD_NOT = "dd_not"
     ALL = "all"
 
+
+class RESAMPLE(Enum):
+    """Controls the equity frequency used for resamplable metrics and plots."""
+
+    NOCHANGE = "nochange"
+    DAILY = "daily"
+
+
 @dataclass(frozen=True)
 class ReportItem:
     """One layout-aware report entry produced by Metrics.run()."""
@@ -61,6 +69,7 @@ class EquityCurvePlotConfig:
 class MetricsConfig:
     """Controls which metrics/assets are produced by Metrics.run()."""
 
+    resample: RESAMPLE = RESAMPLE.NOCHANGE
     tot_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     tot_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
     mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
@@ -110,21 +119,68 @@ class Metrics:
         self.config = config
         self.assets_dir = assets_dir
 
-        self.equity = pl.read_csv(self.equity_path)
+        self.equity_raw = pl.read_csv(self.equity_path)
+        self.equity = self._prepare_equity(self.equity_raw)
         self.orders = pl.read_csv(self.orders_path)
-        self._clean_equity()
         self._add_equity_columns()
         self.trades = self._build_trades_from_orders()
         self.periods_per_year = self._resolve_periods_per_year()
 
         self.report: list[ReportItem] = []
+        self._equity_ret_skewness: float | None = None
+        self._equity_ret_kurtosis: float | None = None
 
-    def _clean_equity(self) -> None:
-        """Drop invalid rows from the in-memory equity curve only."""
-        self.equity = self.equity.filter(
+    def run(self) -> list[ReportItem]:
+        """Run enabled metrics and return the collected report values."""
+        self.tot_ret_pct()
+        self.tot_ret_not()
+        self.mean_yearly_ret_pct()
+        self.mean_yearly_ret_not()
+        self.avg_trade()
+        self.sharpe()
+        self.max_drawdown()
+        self.plot_equity_curve()
+        self.plot_equity_ret_distr()
+        self.skewness()
+        self.kurtosis()
+        self.plot_trade_ret_distr()
+
+        return self.report
+
+    def _prepare_equity(self, equity: pl.DataFrame) -> pl.DataFrame:
+        """Clean raw equity and apply the configured resampling mode."""
+        equity = self._clean_equity(equity)
+
+        if self.config.resample == RESAMPLE.NOCHANGE:
+            return equity
+
+        if self.config.resample == RESAMPLE.DAILY:
+            return self._resample_equity_daily(equity)
+
+        raise ValueError(f"unknown equity resample mode: {self.config.resample}")
+
+    def _clean_equity(self, equity: pl.DataFrame) -> pl.DataFrame:
+        """Drop invalid rows from an equity curve dataframe."""
+        return equity.filter(
             pl.col("ts").is_not_null()
             & pl.col("equity").is_not_null()
             & pl.col("equity").is_not_nan()
+        )
+
+    def _resample_equity_daily(self, equity: pl.DataFrame) -> pl.DataFrame:
+        """Keep the last equity point for each calendar date."""
+        return (
+            equity
+            .sort("ts")
+            .with_columns(
+                pl.from_epoch("ts", time_unit="ms").dt.date().alias("_date")
+            )
+            .group_by("_date", maintain_order=True)
+            .agg(
+                pl.col("ts").last().alias("ts"),
+                pl.col("equity").last().alias("equity"),
+            )
+            .drop("_date")
         )
 
     def _add_equity_columns(self) -> None:
@@ -143,23 +199,6 @@ class Metrics:
             (pl.col("equity") / pl.col("equity_peak") - 1.0).alias("dd_pct"),
         )
     
-
-    def run(self) -> list[ReportItem]:
-        """Run enabled metrics and return the collected report values."""
-        self.tot_ret_pct()
-        self.tot_ret_not()
-        self.mean_yearly_ret_pct()
-        self.mean_yearly_ret_not()
-        self.avg_trade()
-        self.sharpe()
-        self.max_drawdown()
-        self.skewness()
-        self.kurtosis()
-        self.plot_equity_curve()
-        self.plot_equity_ret_distr()
-        self.plot_trade_ret_distr()
-
-        return self.report
 
     def _resolve_periods_per_year(self) -> float:
         """Use an explicit annualization override when provided, otherwise infer it."""
@@ -459,11 +498,13 @@ class Metrics:
         if not cfg.enabled:
             return
 
-        value = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
+        if self._equity_ret_skewness is None:
+            self._equity_ret_skewness = self.equity["eq_ret"].drop_nulls().drop_nans().skew()
+
         self.report.append(
             ReportItem(
                 "return_skewness",
-                self._round_metric(value, cfg.decimals),
+                self._round_metric(self._equity_ret_skewness, cfg.decimals),
                 cfg.importance,
                 "metric",
             )
@@ -475,11 +516,13 @@ class Metrics:
         if not cfg.enabled:
             return
 
-        value = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
+        if self._equity_ret_kurtosis is None:
+            self._equity_ret_kurtosis = self.equity["eq_ret"].drop_nulls().drop_nans().kurtosis()
+
         self.report.append(
             ReportItem(
                 "return_kurtosis",
-                self._round_metric(value, cfg.decimals),
+                self._round_metric(self._equity_ret_kurtosis, cfg.decimals),
                 cfg.importance,
                 "metric",
             )
@@ -567,6 +610,8 @@ class Metrics:
             return
 
         out_path = self.assets_dir / "equity_return_distribution.png"
+        self._equity_ret_skewness = returns.skew()
+        self._equity_ret_kurtosis = returns.kurtosis()
         return_values = returns.to_numpy()
         fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
         ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
@@ -578,11 +623,21 @@ class Metrics:
                 density = np.exp(
                     -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
                 ).sum(axis=1) / (return_values.size * bandwidth * np.sqrt(2 * np.pi))
-                ax.plot(x_grid, density, color="black", linewidth=1.2)
+                ax.plot(
+                    x_grid,
+                    density,
+                    color="black",
+                    linewidth=1.2,
+                    label=(
+                        f"skew={self._round_metric(self._equity_ret_skewness, 2)}, "
+                        f"kurt={self._round_metric(self._equity_ret_kurtosis, 2)}"
+                    ),
+                )
         ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
         ax.set_title("Equity Return Distribution")
         ax.set_xlabel("Return (%)")
         ax.set_ylabel("Density")
+        ax.legend()
         ax.grid(True, alpha=0.25)
         fig.tight_layout()
         fig.savefig(out_path, dpi=150)
@@ -603,6 +658,8 @@ class Metrics:
             return
 
         out_path = self.assets_dir / "trade_return_distribution.png"
+        trade_skewness = returns.skew()
+        trade_kurtosis = returns.kurtosis()
         return_values = returns.to_numpy()
         fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
         ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
@@ -614,11 +671,21 @@ class Metrics:
                 density = np.exp(
                     -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
                 ).sum(axis=1) / (return_values.size * bandwidth * np.sqrt(2 * np.pi))
-                ax.plot(x_grid, density, color="black", linewidth=1.2)
+                ax.plot(
+                    x_grid,
+                    density,
+                    color="black",
+                    linewidth=1.2,
+                    label=(
+                        f"skew={self._round_metric(trade_skewness, 2)}, "
+                        f"kurt={self._round_metric(trade_kurtosis, 2)}"
+                    ),
+                )
         ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
         ax.set_title("Trade Return Distribution")
         ax.set_xlabel("Return (%)")
         ax.set_ylabel("Density")
+        ax.legend()
         ax.grid(True, alpha=0.25)
         fig.tight_layout()
         fig.savefig(out_path, dpi=150)

@@ -31,6 +31,11 @@ table {
     margin-bottom: 8mm;
 }
 
+.metrics-page-break {
+    break-before: page;
+    page-break-before: always;
+}
+
 th,
 td {
     border-bottom: 0.2mm solid #d0d0d0;

@@ -134,6 +134,7 @@ def write_markdown_report(
         f"| Data | {metadata.get('data', '')} |",
         f"| Currency | {currency} ({_markdown_currency(currency_symbol_)}) |",
         f"| Cost per trade | {cost_bps} bps |",
+        f"| Resample | {metadata.get('resample', '')} |",
         "",
         "</div>",
         "",
@@ -142,6 +143,7 @@ def write_markdown_report(
     importance_levels = sorted(
         {item.importance for item in report},
     )
+    metrics_started = False
     for section_idx, importance in enumerate(importance_levels):
         plots = [
             item for item in report
@@ -158,9 +160,12 @@ def write_markdown_report(
             plot_path = Path(str(item.value))
             if plot_path.is_relative_to(REPORT_DIR):
                 plot_path = plot_path.relative_to(REPORT_DIR)
-            lines.extend(["", f"**{item.name}**", "", f"![]({plot_path})"])
+            lines.extend(["", f"![]({plot_path})"])
 
         if metrics:
+            if not metrics_started:
+                lines.extend(["", '<div class="metrics-page-break"></div>'])
+                metrics_started = True
             lines.extend(["", f"## {section_title}", "", "| Metric | Value |", "|---|---:|"])
             for item in metrics:
                 metric_name, metric_value = _format_metric(item, currency_symbol_)
@@ -217,6 +222,7 @@ def main() -> None:
     )
     report = metrics.run()
     metadata = read_metadata()
+    metadata["resample"] = metrics.config.resample.name
     write_markdown_report(report, metadata)
     write_pdf_report()
     cleanup_markdown_report()
