@@ -7,6 +7,7 @@ from typing import Literal
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import polars as pl
 
 
@@ -70,6 +71,18 @@ class MetricsConfig:
     skewness: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
     kurtosis: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
     plot_equity_curve_cfg: EquityCurvePlotConfig = field(default_factory=EquityCurvePlotConfig)
+    plot_equity_ret_distr_cfg: PlotConfig = PlotConfig(
+        enabled=True,
+        figsize_x=9.0,
+        figsize_y=5.0,
+        importance=2,
+    )
+    plot_trade_ret_distr_cfg: PlotConfig = PlotConfig(
+        enabled=True,
+        figsize_x=9.0,
+        figsize_y=5.0,
+        importance=2,
+    )
     periods_per_year_override: float = -1.0
     trading_days_inferred: float = 252.0
 
@@ -101,6 +114,7 @@ class Metrics:
         self.orders = pl.read_csv(self.orders_path)
         self._clean_equity()
         self._add_equity_columns()
+        self.trades = self._build_trades_from_orders()
         self.periods_per_year = self._resolve_periods_per_year()
 
         self.report: list[ReportItem] = []
@@ -142,6 +156,8 @@ class Metrics:
         self.skewness()
         self.kurtosis()
         self.plot_equity_curve()
+        self.plot_equity_ret_distr()
+        self.plot_trade_ret_distr()
 
         return self.report
 
@@ -179,6 +195,106 @@ class Metrics:
             return 0.0
 
         return round(float(value), decimals)
+
+    def _build_trades_from_orders(self) -> pl.DataFrame:
+        """Reconstruct completed round-trip trades from filled order events."""
+        columns = ["trade_id", "entry_ts", "exit_ts", "side", "qty", "entry_price", "exit_price", "pnl", "pnl_pct"]
+        if self.orders.is_empty():
+            return pl.DataFrame(schema={name: pl.Float64 for name in columns})
+
+        required = {"id", "ts", "signal", "qty", "price", "status"}
+        if not required.issubset(set(self.orders.columns)):
+            return pl.DataFrame(schema={name: pl.Float64 for name in columns})
+
+        filled_orders = (
+            self.orders
+            .filter(pl.col("status") == "filled")
+            .with_columns(
+                pl.when(pl.col("signal") == "bbuy")
+                .then(pl.col("qty"))
+                .when(pl.col("signal") == "bsell")
+                .then(-pl.col("qty"))
+                .otherwise(0.0)
+                .alias("signed_qty")
+            )
+            .filter(pl.col("signed_qty") != 0.0)
+            .with_columns((pl.col("signed_qty") * pl.col("price")).alias("signed_notional"))
+            .sort(["ts", "id"])
+            .group_by("ts", maintain_order=True)
+            .agg(
+                pl.col("signed_qty").sum().alias("signed_qty"),
+                pl.col("signed_notional").sum().alias("signed_notional"),
+            )
+            .filter(pl.col("signed_qty") != 0.0)
+            .with_columns((pl.col("signed_notional") / pl.col("signed_qty")).alias("price"))
+        )
+
+        trades: list[dict[str, float | int | str]] = []
+        position_qty = 0.0
+        entry_price = 0.0
+        entry_ts = 0
+        next_trade_id = 1
+
+        for ts_raw, signed_qty_raw, price_raw in (
+            filled_orders
+            .select("ts", "signed_qty", "price")
+            .iter_rows()
+        ):
+            ts = int(ts_raw)
+            signed_qty = float(signed_qty_raw)
+            price = float(price_raw)
+
+            if position_qty == 0.0:
+                position_qty = signed_qty
+                entry_price = price
+                entry_ts = ts
+                continue
+
+            if position_qty * signed_qty > 0:
+                total_qty = abs(position_qty) + abs(signed_qty)
+                entry_price = (
+                    entry_price * abs(position_qty) + price * abs(signed_qty)
+                ) / total_qty
+                position_qty += signed_qty
+                continue
+
+            close_qty = min(abs(position_qty), abs(signed_qty))
+            side = "long" if position_qty > 0 else "short"
+            pnl = (
+                (price - entry_price) * close_qty
+                if side == "long"
+                else (entry_price - price) * close_qty
+            )
+            pnl_pct = pnl / (entry_price * close_qty) * 100.0 if entry_price else 0.0
+
+            trades.append(
+                {
+                    "trade_id": next_trade_id,
+                    "entry_ts": entry_ts,
+                    "exit_ts": ts,
+                    "side": side,
+                    "qty": close_qty,
+                    "entry_price": entry_price,
+                    "exit_price": price,
+                    "pnl": pnl,
+                    "pnl_pct": pnl_pct,
+                }
+            )
+            next_trade_id += 1
+
+            leftover_qty = signed_qty + position_qty
+            if abs(signed_qty) < abs(position_qty):
+                position_qty += signed_qty
+            elif leftover_qty == 0.0:
+                position_qty = 0.0
+                entry_price = 0.0
+                entry_ts = 0
+            else:
+                position_qty = leftover_qty
+                entry_price = price
+                entry_ts = ts
+
+        return pl.DataFrame(trades)
 
     def tot_ret_pct(self) -> None:
         """Add total percentage return from first to final equity."""
@@ -379,7 +495,7 @@ class Metrics:
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
             datetime.fromtimestamp(ts / 1000.0)
-            for ts in self.equity["ts"].to_list()
+            for ts in self.equity["ts"]
         ]
 
         plot_rows = 1
@@ -403,7 +519,7 @@ class Metrics:
             axes = [axes]
 
         equity_ax = axes[0]
-        equity_ax.plot(timestamps, self.equity["equity"].to_list(), linewidth=1.2)
+        equity_ax.plot(timestamps, self.equity["equity"], linewidth=1.2)
         equity_ax.set_title("Equity Curve")
         equity_ax.set_ylabel("Equity")
         equity_ax.grid(True, alpha=0.3)
@@ -413,7 +529,7 @@ class Metrics:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
-                self.equity["dd_not"].to_list(),
+                self.equity["dd_not"],
                 "Drawdown Notional",
                 "Drawdown",
             )
@@ -423,7 +539,7 @@ class Metrics:
             self._plot_drawdown_axis(
                 axes[row],
                 timestamps,
-                self.equity["dd_pct"].to_list(),
+                self.equity["dd_pct"],
                 "Drawdown %",
                 "Drawdown %",
             )
@@ -440,11 +556,83 @@ class Metrics:
             ReportItem("equity_curve_plot", str(out_path), base_cfg.importance, "plot")
         )
 
+    def plot_equity_ret_distr(self) -> None:
+        """Save a histogram of equity curve bar returns."""
+        cfg = self.config.plot_equity_ret_distr_cfg
+        if not cfg.enabled:
+            return
+
+        returns = self.equity["eq_ret"].drop_nulls().drop_nans() * 100.0
+        if returns.is_empty():
+            return
+
+        out_path = self.assets_dir / "equity_return_distribution.png"
+        return_values = returns.to_numpy()
+        fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
+        ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
+        if return_values.size > 1:
+            std = return_values.std(ddof=1)
+            bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0
+            if bandwidth > 0:
+                x_grid = np.linspace(return_values.min(), return_values.max(), 300)
+                density = np.exp(
+                    -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
+                ).sum(axis=1) / (return_values.size * bandwidth * np.sqrt(2 * np.pi))
+                ax.plot(x_grid, density, color="black", linewidth=1.2)
+        ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
+        ax.set_title("Equity Return Distribution")
+        ax.set_xlabel("Return (%)")
+        ax.set_ylabel("Density")
+        ax.grid(True, alpha=0.25)
+        fig.tight_layout()
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+
+        self.report.append(
+            ReportItem("equity_return_distribution", str(out_path), cfg.importance, "plot")
+        )
+
+    def plot_trade_ret_distr(self) -> None:
+        """Save a histogram of completed trade percentage returns."""
+        cfg = self.config.plot_trade_ret_distr_cfg
+        if not cfg.enabled or self.trades.is_empty():
+            return
+
+        returns = self.trades["pnl_pct"].drop_nulls().drop_nans()
+        if returns.is_empty():
+            return
+
+        out_path = self.assets_dir / "trade_return_distribution.png"
+        return_values = returns.to_numpy()
+        fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
+        ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
+        if return_values.size > 1:
+            std = return_values.std(ddof=1)
+            bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0
+            if bandwidth > 0:
+                x_grid = np.linspace(return_values.min(), return_values.max(), 300)
+                density = np.exp(
+                    -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
+                ).sum(axis=1) / (return_values.size * bandwidth * np.sqrt(2 * np.pi))
+                ax.plot(x_grid, density, color="black", linewidth=1.2)
+        ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
+        ax.set_title("Trade Return Distribution")
+        ax.set_xlabel("Return (%)")
+        ax.set_ylabel("Density")
+        ax.grid(True, alpha=0.25)
+        fig.tight_layout()
+        fig.savefig(out_path, dpi=150)
+        plt.close(fig)
+
+        self.report.append(
+            ReportItem("trade_return_distribution", str(out_path), cfg.importance, "plot")
+        )
+
     def _plot_drawdown_axis(
         self,
         ax: plt.Axes,
         timestamps: list[datetime],
-        drawdown: list[float],
+        drawdown: pl.Series,
         title: str,
         ylabel: str,
     ) -> None:

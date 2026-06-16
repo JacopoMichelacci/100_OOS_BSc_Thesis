@@ -196,6 +196,10 @@ def write_pdf_report() -> None:
         raise RuntimeError(proc.stderr.strip())
 
 
+def cleanup_markdown_report() -> None:
+    REPORT_MD_PATH.unlink(missing_ok=True)
+
+
 def main() -> None:
     print("\ngenerating report...")
     start = perf_counter()
@@ -215,6 +219,7 @@ def main() -> None:
     metadata = read_metadata()
     write_markdown_report(report, metadata)
     write_pdf_report()
+    cleanup_markdown_report()
 
     runtime_ms = (perf_counter() - start) * 1000
     print(f"\nreport runtime: {runtime_ms:.0f}ms")
