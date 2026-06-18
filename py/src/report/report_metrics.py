@@ -71,9 +71,10 @@ class MetricsConfig:
 
     resample: RESAMPLE = RESAMPLE.NOCHANGE
     tot_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
-    tot_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
+    tot_ret_not: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
+    cagr: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
-    mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
+    mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
     avg_trade: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
     sharpe: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     max_drawdown: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
@@ -93,7 +94,6 @@ class MetricsConfig:
         importance=2,
     )
     periods_per_year_override: float = -1.0
-    trading_days_inferred: float = 252.0
 
 
 
@@ -132,8 +132,11 @@ class Metrics:
 
     def run(self) -> list[ReportItem]:
         """Run enabled metrics and return the collected report values."""
+        self.report.clear()
+
         self.tot_ret_pct()
         self.tot_ret_not()
+        self.cagr()
         self.mean_yearly_ret_pct()
         self.mean_yearly_ret_not()
         self.avg_trade()
@@ -205,28 +208,20 @@ class Metrics:
         if self.config.periods_per_year_override > 0:
             return self.config.periods_per_year_override
 
-        return self._infer_periods_per_year()
-
-    def _infer_periods_per_year(self) -> float:
-        """Infer sampling frequency from the median timestamp gap."""
         if self.equity.height < 2:
             raise ValueError("cannot infer periods_per_year: equity curve has fewer than 2 rows")
 
-        ts_diffs = self.equity["ts"].diff().drop_nulls().drop_nans()
-        if ts_diffs.is_empty():
-            raise ValueError("cannot infer periods_per_year: timestamp differences are empty")
-
-        median_diff_ms = ts_diffs.median()
-        if median_diff_ms is None:
-            raise ValueError("cannot infer periods_per_year: median timestamp difference is null")
-        
-        if median_diff_ms <= 0:
+        first_ts = self.equity["ts"][0]
+        last_ts = self.equity["ts"][-1]
+        elapsed_ms = last_ts - first_ts
+        if elapsed_ms == 0:
             raise ValueError(
-                f"cannot infer periods_per_year: non-positive median timestamp difference {median_diff_ms}"
+                "cannot infer periods_per_year: equity curve has zero elapsed time"
             )
 
-        year_ms = self.config.trading_days_inferred * 24 * 60 * 60 * 1000
-        return year_ms / median_diff_ms
+        milliseconds_per_year = 365.25 * 24 * 60 * 60 * 1000
+        elapsed_years = elapsed_ms / milliseconds_per_year
+        return (self.equity.height - 1) / elapsed_years
 
     def _round_metric(self, value: float | int | None, decimals: int) -> float:
         """Round a scalar metric while normalizing missing values to zero."""
@@ -371,6 +366,34 @@ class Metrics:
             )
         )
 
+    def cagr(self) -> None:
+        """Add compound annual growth rate using elapsed calendar time."""
+        cfg = self.config.cagr
+        if not cfg.enabled:
+            return
+
+        initial_equity = self.equity["equity"][0]
+        final_equity = self.equity["equity"][-1]
+        elapsed_years = (self.equity["ts"][-1] - self.equity["ts"][0]) / (
+            365.25 * 24 * 60 * 60 * 1000
+        )
+
+        if initial_equity <= 0 or final_equity <= 0 or elapsed_years <= 0:
+            value: float | str = "N/A"
+        else:
+            value = (
+                (final_equity / initial_equity) ** (1.0 / elapsed_years) - 1.0
+            ) * 100.0
+
+        self.report.append(
+            ReportItem(
+                "cagr",
+                value if isinstance(value, str) else self._round_metric(value, cfg.decimals),
+                cfg.importance,
+                "metric",
+            )
+        )
+
     def mean_yearly_ret_pct(self) -> None:
         """Add annualized average percentage return."""
         cfg = self.config.mean_yearly_ret_pct
@@ -404,12 +427,12 @@ class Metrics:
         )
 
     def avg_trade(self) -> None:
-        """Add net profit, trade count, and average profit per filled order."""
+        """Add net profit, completed trade count, and average profit per trade."""
         cfg = self.config.avg_trade
         if not cfg.enabled:
             return
 
-        n_trades = self._filled_order_count()
+        n_trades = self.trades.height
         net_profit = self._net_profit()
 
         self.report.append(ReportItem("n_trades", n_trades, cfg.importance, "metric"))
@@ -429,13 +452,6 @@ class Metrics:
                 "metric",
             )
         )
-
-    def _filled_order_count(self) -> int:
-        """Count filled orders from the order log."""
-        if self.orders.is_empty() or "status" not in self.orders.columns:
-            return 0
-
-        return self.orders.filter(pl.col("status") == "filled").height
 
     def _net_profit(self) -> float:
         """Compute final equity minus initial equity."""

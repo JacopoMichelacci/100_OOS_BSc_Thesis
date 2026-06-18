@@ -32,6 +32,7 @@ CURRENCY_SYMBOLS = {
 
 PCT_METRICS = {
     "tot_ret_pct",
+    "cagr",
     "mean_yearly_ret_pct",
     "max_dd_pct",
 }
@@ -68,6 +69,9 @@ def _format_notional_value(value: float | int | str, currency: str) -> str:
 
 
 def _format_metric(item: ReportItem, currency_symbol: str) -> tuple[str, str]:
+    if isinstance(item.value, str):
+        return item.name, item.value
+
     if item.name in PCT_METRICS:
         return item.name, f"{_format_value(item.value)}%"
 
