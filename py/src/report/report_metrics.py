@@ -71,7 +71,6 @@ class MetricsConfig:
 
     resample: RESAMPLE = RESAMPLE.NOCHANGE
     tot_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
-    tot_ret_not: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
     cagr: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
@@ -101,6 +100,10 @@ class Metrics:
     """
     Computes backtest metrics and plot assets from C++ backtester CSV outputs.
 
+    Input timestamp contract:
+        The ``ts`` column in the equity and order CSV files must contain Unix
+        epoch timestamps in milliseconds.
+
     The class owns cleaned in-memory copies of the equity curve and order log.
     Derived series such as returns and drawdowns are computed once and reused by
     metric methods. Calling run() executes the enabled metrics from MetricsConfig
@@ -119,7 +122,13 @@ class Metrics:
         self.config = config
         self.assets_dir = assets_dir
 
-        self.equity_raw = pl.read_csv(self.equity_path)
+        self.equity_raw = pl.read_csv(
+            self.equity_path,
+            schema_overrides={
+                "ts": pl.Int64,
+                "equity": pl.Float64,
+            },
+        )
         self.equity = self._prepare_equity(self.equity_raw)
         self.orders = pl.read_csv(self.orders_path)
         self._add_equity_columns()
@@ -135,7 +144,6 @@ class Metrics:
         self.report.clear()
 
         self.tot_ret_pct()
-        self.tot_ret_not()
         self.cagr()
         self.mean_yearly_ret_pct()
         self.mean_yearly_ret_not()
@@ -151,7 +159,7 @@ class Metrics:
         return self.report
 
     def _prepare_equity(self, equity: pl.DataFrame) -> pl.DataFrame:
-        """Clean raw equity and apply the configured resampling mode."""
+        """Clean equity with epoch-millisecond timestamps and apply resampling."""
         equity = self._clean_equity(equity)
 
         if self.config.resample == RESAMPLE.NOCHANGE:
@@ -244,9 +252,9 @@ class Metrics:
             self.orders
             .filter(pl.col("status") == "filled")
             .with_columns(
-                pl.when(pl.col("signal") == "bbuy")
+                pl.when(pl.col("signal").is_in(["bbuy", "long", "cover"]))
                 .then(pl.col("qty"))
-                .when(pl.col("signal") == "bsell")
+                .when(pl.col("signal").is_in(["bsell", "short", "sell"]))
                 .then(-pl.col("qty"))
                 .otherwise(0.0)
                 .alias("signed_qty")
@@ -344,22 +352,6 @@ class Metrics:
         self.report.append(
             ReportItem(
                 "tot_ret_pct",
-                self._round_metric(value, cfg.decimals),
-                cfg.importance,
-                "metric",
-            )
-        )
-
-    def tot_ret_not(self) -> None:
-        """Add total notional return from first to final equity."""
-        cfg = self.config.tot_ret_not
-        if not cfg.enabled:
-            return
-
-        value = self._net_profit()
-        self.report.append(
-            ReportItem(
-                "tot_ret_not",
                 self._round_metric(value, cfg.decimals),
                 cfg.importance,
                 "metric",

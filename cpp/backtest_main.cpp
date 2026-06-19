@@ -24,15 +24,15 @@ int main() {
     
     // 2. set up strategy
     MAC<OHLCVEvent> strat("mac_demo", MACConfig<OHLCVEvent>{
-        .fast_len = 10,
-        .slow_len = 30,
+        .fast_len = 50,
+        .slow_len = 100,
         .qty = 1.0
     });
 
     // 3. set up backtester
     BacktestConfig bt_config{
         .initial_capital = 100'000.0,
-        .cost_bps = 3.0,
+        .cost_bps = 0.0,
         .currency = "USD"
     };
     Backtester<OHLCVEvent> bt(bt_config);

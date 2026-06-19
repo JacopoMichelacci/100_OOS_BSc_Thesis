@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <ctime>
 #include <stdexcept>
+#include <cstdint>
 
 #include <utility>
 
@@ -81,7 +82,7 @@ inline long long to_epoch_ms(const std::string& ts, DATE_FORMAT format = DATE_FO
     return static_cast<long long>(epoch) * 1000 + ms;
 }
 
-enum class TS_UNIT { SECONDS, MILLISECONDS };
+enum class TS_UNIT : std::int8_t { SECONDS, MILLISECONDS, MICROSECONDS, NANOSECONDS };
 
 // numeric version
 template <std::integral T>
@@ -89,6 +90,8 @@ inline long long to_epoch_ms(T ts, TS_UNIT unit = TS_UNIT::MILLISECONDS) {
     switch (unit) {
         case TS_UNIT::SECONDS:      return static_cast<long long>(ts) * 1000;
         case TS_UNIT::MILLISECONDS: return static_cast<long long>(ts);
+        case TS_UNIT::MICROSECONDS: return static_cast<long long>(ts) / 1000;
+        case TS_UNIT::NANOSECONDS:  return static_cast<long long>(ts) / 1'000'000;
         default: throw std::invalid_argument("to_epoch_ms: unknown TS_UNIT");
     }
 }
@@ -100,7 +103,7 @@ inline long long to_epoch_ms(T ts, TS_UNIT unit = TS_UNIT::MILLISECONDS) {
  *
  * to_date(ts_ms)        → YYYYMMDD          as long long  (e.g. 20240605)
  * to_time(ts_ms)        → HHMMSS.mmm        as double     (e.g. 143000.123)
- * to_datetime(ts_ms)    → YYYYMMDDHHMMSSMMM as long long  (e.g. 20240605143000123)
+ * to_datetime(ts_ms)    → YYYYMMDDHHMMSSMMM as long long  (e.g. 20240605143000123)     (epoch_ms)
  * to_day_of_week(ts_ms) → 0-6               as int        (0=Sun, 1=Mon ... 6=Sat)
 */
 

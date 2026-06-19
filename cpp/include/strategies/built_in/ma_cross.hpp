@@ -52,17 +52,21 @@ public:
             return;
         }
 
+
         // LONG 
         if (this->bconfig.long_active) {
             if (fast_sma[-1] >= slow_sma[-1] && fast_sma[-2] < slow_sma[-2]) {
-                out.push_back({.signal = SIGNAL::BBUY, .qty = params.qty, .type = ORDER_TYPE::MARKET});
+                out.push_back({.signal = SIGNAL::BBUY, .qty = params.qty + (-opos), .type = ORDER_TYPE::MARKET});
+                opos += params.qty + (-opos);
             }
         }
+
 
         // SHORT
         if (this->bconfig.short_active) {
             if (fast_sma[-1] <= slow_sma[-1] && fast_sma[-2] > slow_sma[-2]) {
-                out.push_back({.signal = SIGNAL::BSELL, .qty = params.qty, .type = ORDER_TYPE::MARKET});
+                out.push_back({.signal = SIGNAL::BSELL, .qty = params.qty + opos, .type = ORDER_TYPE::MARKET});
+                opos -= params.qty + opos;
             }
         }
 
@@ -70,6 +74,8 @@ public:
     }
 
 private:
+    double opos = 0.0;
+
     MACConfig<Tin> params;
 
     SMA<double, double> fast_sma;

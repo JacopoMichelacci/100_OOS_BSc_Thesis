@@ -37,7 +37,6 @@ PCT_METRICS = {
     "max_dd_pct",
 }
 NOTIONAL_METRICS = {
-    "tot_ret_not",
     "mean_yearly_ret_not",
     "net_profit",
     "avg_trade",
