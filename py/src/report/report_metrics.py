@@ -72,13 +72,13 @@ class MetricsConfig:
     resample: RESAMPLE = RESAMPLE.NOCHANGE
     tot_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     cagr: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
-    mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
-    mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
+    mean_yearly_ret_pct: MetricConfig = MetricConfig(enabled=False, decimals=2, importance=1)
+    mean_yearly_ret_not: MetricConfig = MetricConfig(enabled=False, decimals=1, importance=1)
     avg_trade: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
     sharpe: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     max_drawdown: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
-    skewness: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
-    kurtosis: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
+    skewness: MetricConfig = MetricConfig(enabled=False, decimals=2, importance=2)
+    kurtosis: MetricConfig = MetricConfig(enabled=False, decimals=2, importance=2)
     plot_equity_curve_cfg: EquityCurvePlotConfig = field(default_factory=EquityCurvePlotConfig)
     plot_equity_ret_distr_cfg: PlotConfig = PlotConfig(
         enabled=True,
@@ -622,7 +622,14 @@ class Metrics:
         self._equity_ret_kurtosis = returns.kurtosis()
         return_values = returns.to_numpy()
         fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
-        ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
+        ax.hist(
+            return_values,
+            bins=50,
+            density=True,
+            color=(76 / 255, 120 / 255, 168 / 255, 0.85),
+            edgecolor=(0.2, 0.2, 0.2, 0.35),
+            linewidth=0.35,
+        )
         if return_values.size > 1:
             std = return_values.std(ddof=1)
             bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0
@@ -670,7 +677,14 @@ class Metrics:
         trade_kurtosis = returns.kurtosis()
         return_values = returns.to_numpy()
         fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
-        ax.hist(return_values, bins=50, density=True, color="#4C78A8", alpha=0.85)
+        ax.hist(
+            return_values,
+            bins=50,
+            density=True,
+            color=(76 / 255, 120 / 255, 168 / 255, 0.85),
+            edgecolor=(0.2, 0.2, 0.2, 0.35),
+            linewidth=0.35,
+        )
         if return_values.size > 1:
             std = return_values.std(ddof=1)
             bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0

@@ -52,7 +52,7 @@ public:
 
             // call on data
             plog.clear();
-            strat.on_data(in, plog);
+            strat.on_data(in, opos, plog);
 
             // mtm update
             results.equity_curve.emplace_back(cash + opos * in.close);

@@ -62,7 +62,7 @@ public:
     virtual ~Strategy() = default;
 
     // works for: Live and Backtest -- generates a vector of OrderEvents
-    virtual void on_data(const Tin& input, std::vector<OrderEvent>& out) = 0;
+    virtual void on_data(const Tin& input, double opos, std::vector<OrderEvent>& out) = 0;
 
 
     // getters
@@ -97,6 +97,5 @@ protected:
         }
     }
 };
-
 
 

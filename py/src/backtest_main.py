@@ -43,6 +43,21 @@ NOTIONAL_METRICS = {
     "max_dd_not",
 }
 
+METRIC_LABELS = {
+    "tot_ret_pct": "Total Return",
+    "cagr": "CAGR",
+    "mean_yearly_ret_pct": "Mean Annual Return",
+    "mean_yearly_ret_not": "Mean Annual Profit",
+    "n_trades": "Completed Trades",
+    "net_profit": "Net Profit",
+    "avg_trade": "Average Trade",
+    "sharpe": "Sharpe Ratio",
+    "max_dd_not": "Maximum Drawdown",
+    "max_dd_pct": "Maximum Drawdown",
+    "return_skewness": "Return Skewness",
+    "return_kurtosis": "Return Kurtosis",
+}
+
 
 def _format_value(value: float | int | str) -> str:
     if isinstance(value, float):
@@ -68,16 +83,18 @@ def _format_notional_value(value: float | int | str, currency: str) -> str:
 
 
 def _format_metric(item: ReportItem, currency_symbol: str) -> tuple[str, str]:
+    label = METRIC_LABELS.get(item.name, item.name.replace("_", " ").title())
+
     if isinstance(item.value, str):
-        return item.name, item.value
+        return label, item.value
 
     if item.name in PCT_METRICS:
-        return item.name, f"{_format_value(item.value)}%"
+        return label, f"{_format_value(item.value)}%"
 
     if item.name in NOTIONAL_METRICS:
-        return item.name, _format_notional_value(item.value, currency_symbol)
+        return label, _format_notional_value(item.value, currency_symbol)
 
-    return item.name, _format_value(item.value)
+    return label, _format_value(item.value)
 
 
 def resolve_currency(metadata: dict[str, str]) -> str:
@@ -172,7 +189,7 @@ def write_markdown_report(
             lines.extend(["", f"## {section_title}", "", "| Metric | Value |", "|---|---:|"])
             for item in metrics:
                 metric_name, metric_value = _format_metric(item, currency_symbol_)
-                lines.append(f"| `{metric_name}` | {metric_value} |")
+                lines.append(f"| {metric_name} | {metric_value} |")
 
     REPORT_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
 
