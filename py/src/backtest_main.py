@@ -9,10 +9,49 @@ from report.report_metrics import (
     EquityCurvePlotConfig,
     Metrics,
     MetricsConfig,
+    PLOT_MODE,
     PlotConfig,
     ReportItem,
 )
 
+############################################################################################################
+
+def main() -> None:
+    print("\ngenerating report...")
+    start = perf_counter()
+
+    metadata = read_metadata()
+    cost_bps = float(resolve_cost_bps(metadata))
+    metrics = Metrics(
+        EQUITY_PATH,
+        ORDERS_PATH,
+        MetricsConfig(
+            plot_equity_curve_cfg=EquityCurvePlotConfig(
+                base=PlotConfig(mode=PLOT_MODE.DEFAULT),
+                dd_mode=DRAWDOWN_PLOT_MODE.ALL,
+            ),
+            plot_equity_ret_distr_cfg=PlotConfig(
+                importance=2,
+                mode=PLOT_MODE.DEFAULT,
+            ),
+            plot_trade_ret_distr_cfg=PlotConfig(
+                importance=2,
+                mode=PLOT_MODE.DEFAULT,
+            ),
+        ),
+        ASSETS_DIR,
+        cost_bps=cost_bps,
+    )
+    report = metrics.run()
+    metadata["resample"] = metrics.config.resample.name
+    write_markdown_report(report, metadata)
+    write_pdf_report()
+    cleanup_markdown_report()
+
+    runtime_ms = (perf_counter() - start) * 1000
+    print(f"\nreport runtime: {runtime_ms:.0f}ms")
+
+############################################################################################################
 
 REPORT_DIR = Path("output/backtest")
 ASSETS_DIR = Path("output/backtest/_assets")
@@ -35,12 +74,14 @@ PCT_METRICS = {
     "cagr",
     "mean_yearly_ret_pct",
     "max_dd_pct",
+    "win_rate_pct",
 }
 NOTIONAL_METRICS = {
     "mean_yearly_ret_not",
     "net_profit",
     "avg_trade",
     "max_dd_not",
+    "cost_notional",
 }
 
 METRIC_LABELS = {
@@ -54,6 +95,8 @@ METRIC_LABELS = {
     "sharpe": "Sharpe Ratio",
     "max_dd_not": "Maximum Drawdown",
     "max_dd_pct": "Maximum Drawdown",
+    "cost_notional": "Transaction Costs",
+    "win_rate_pct": "Win Rate",
     "return_skewness": "Return Skewness",
     "return_kurtosis": "Return Kurtosis",
 }
@@ -225,30 +268,6 @@ def cleanup_markdown_report() -> None:
     REPORT_MD_PATH.unlink(missing_ok=True)
 
 
-def main() -> None:
-    print("\ngenerating report...")
-    start = perf_counter()
-
-    metrics = Metrics(
-        EQUITY_PATH,
-        ORDERS_PATH,
-        MetricsConfig(
-            plot_equity_curve_cfg=EquityCurvePlotConfig(
-                base=PlotConfig(),
-                dd_mode=DRAWDOWN_PLOT_MODE.ALL,
-            ),
-        ),
-        ASSETS_DIR,
-    )
-    report = metrics.run()
-    metadata = read_metadata()
-    metadata["resample"] = metrics.config.resample.name
-    write_markdown_report(report, metadata)
-    write_pdf_report()
-    cleanup_markdown_report()
-
-    runtime_ms = (perf_counter() - start) * 1000
-    print(f"\nreport runtime: {runtime_ms:.0f}ms")
 
 
 if __name__ == "__main__":

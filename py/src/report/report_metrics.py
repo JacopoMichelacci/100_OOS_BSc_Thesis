@@ -27,6 +27,15 @@ class RESAMPLE(Enum):
     DAILY = "daily"
 
 
+class PLOT_MODE(Enum):
+    """Controls which trade side contributes to a plot."""
+
+    SHORT = -1
+    DEFAULT = 0
+    LONG = 1
+    ALL = 2
+
+
 @dataclass(frozen=True)
 class ReportItem:
     """One layout-aware report entry produced by Metrics.run()."""
@@ -56,6 +65,7 @@ class PlotConfig:
     figsize_x: float = 12.0
     figsize_y: float = 4.8
     importance: int = 1
+    mode: PLOT_MODE = PLOT_MODE.DEFAULT
 
 @dataclass(frozen=True)
 class EquityCurvePlotConfig:
@@ -77,6 +87,8 @@ class MetricsConfig:
     avg_trade: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
     sharpe: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=1)
     max_drawdown: MetricConfig = MetricConfig(enabled=True, decimals=1, importance=1)
+    cost_notional: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
+    win_rate_pct: MetricConfig = MetricConfig(enabled=True, decimals=2, importance=2)
     skewness: MetricConfig = MetricConfig(enabled=False, decimals=2, importance=2)
     kurtosis: MetricConfig = MetricConfig(enabled=False, decimals=2, importance=2)
     plot_equity_curve_cfg: EquityCurvePlotConfig = field(default_factory=EquityCurvePlotConfig)
@@ -116,11 +128,13 @@ class Metrics:
         orders_path: Path,
         config: MetricsConfig,
         assets_dir: Path,
+        cost_bps: float = 0.0,
     ) -> None:
         self.equity_path = equity_path
         self.orders_path = orders_path
         self.config = config
         self.assets_dir = assets_dir
+        self.cost_bps = cost_bps
 
         self.equity_raw = pl.read_csv(
             self.equity_path,
@@ -150,6 +164,8 @@ class Metrics:
         self.avg_trade()
         self.sharpe()
         self.max_drawdown()
+        self.cost_notional()
+        self.win_rate_pct()
         self.plot_equity_curve()
         self.plot_equity_ret_distr()
         self.skewness()
@@ -500,6 +516,51 @@ class Metrics:
             )
         )
 
+    def cost_notional(self) -> None:
+        """Add total transaction costs across all filled orders."""
+        cfg = self.config.cost_notional
+        if not cfg.enabled:
+            return
+
+        if self.orders.is_empty():
+            value = 0.0
+        else:
+            traded_notional = (
+                self.orders
+                .filter(pl.col("status") == "filled")
+                .select((pl.col("price") * pl.col("qty")).sum())
+                .item()
+            )
+            value = float(traded_notional or 0.0) * self.cost_bps / 10_000.0
+
+        self.report.append(
+            ReportItem(
+                "cost_notional",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
+                "metric",
+            )
+        )
+
+    def win_rate_pct(self) -> None:
+        """Add the percentage of completed round trips with positive gross PnL."""
+        cfg = self.config.win_rate_pct
+        if not cfg.enabled:
+            return
+
+        n_trades = self.trades.height
+        n_wins = self.trades.filter(pl.col("pnl") > 0.0).height if n_trades else 0
+        value = n_wins / n_trades * 100.0 if n_trades else 0.0
+
+        self.report.append(
+            ReportItem(
+                "win_rate_pct",
+                self._round_metric(value, cfg.decimals),
+                cfg.importance,
+                "metric",
+            )
+        )
+
     def skewness(self) -> None:
         """Add skewness of percentage returns."""
         cfg = self.config.skewness
@@ -542,6 +603,10 @@ class Metrics:
         base_cfg = cfg.base
         if not base_cfg.enabled:
             return
+        if base_cfg.mode != PLOT_MODE.DEFAULT:
+            raise ValueError(
+                "plot_equity_curve only supports PLOT_MODE.DEFAULT"
+            )
 
         out_path = self.assets_dir / "equity_curve.png"
         timestamps = [
@@ -612,6 +677,10 @@ class Metrics:
         cfg = self.config.plot_equity_ret_distr_cfg
         if not cfg.enabled:
             return
+        if cfg.mode != PLOT_MODE.DEFAULT:
+            raise ValueError(
+                "plot_equity_ret_distr only supports PLOT_MODE.DEFAULT"
+            )
 
         returns = self.equity["eq_ret"].drop_nulls().drop_nans() * 100.0
         if returns.is_empty():
@@ -665,57 +734,96 @@ class Metrics:
     def plot_trade_ret_distr(self) -> None:
         """Save a histogram of completed trade percentage returns."""
         cfg = self.config.plot_trade_ret_distr_cfg
-        if not cfg.enabled or self.trades.is_empty():
+        if not cfg.enabled:
             return
 
-        returns = self.trades["pnl_pct"].drop_nulls().drop_nans()
-        if returns.is_empty():
-            return
+        plot_specs: list[tuple[str, str, str, pl.DataFrame]] = []
+        if cfg.mode in {PLOT_MODE.DEFAULT, PLOT_MODE.ALL}:
+            plot_specs.append((
+                "trade_return_distribution",
+                "trade_return_distribution.png",
+                "Trade Return Distribution",
+                self.trades,
+            ))
+        if cfg.mode in {PLOT_MODE.LONG, PLOT_MODE.ALL}:
+            plot_specs.append((
+                "long_trade_return_distribution",
+                "long_trade_return_distribution.png",
+                "Long Trade Return Distribution",
+                self.trades.filter(pl.col("side") == "long")
+                if not self.trades.is_empty() else self.trades,
+            ))
+        if cfg.mode in {PLOT_MODE.SHORT, PLOT_MODE.ALL}:
+            plot_specs.append((
+                "short_trade_return_distribution",
+                "short_trade_return_distribution.png",
+                "Short Trade Return Distribution",
+                self.trades.filter(pl.col("side") == "short")
+                if not self.trades.is_empty() else self.trades,
+            ))
+        if not plot_specs:
+            raise ValueError(f"unknown plot mode: {cfg.mode}")
 
-        out_path = self.assets_dir / "trade_return_distribution.png"
-        trade_skewness = returns.skew()
-        trade_kurtosis = returns.kurtosis()
-        return_values = returns.to_numpy()
-        fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
-        ax.hist(
-            return_values,
-            bins=50,
-            density=True,
-            color=(76 / 255, 120 / 255, 168 / 255, 0.85),
-            edgecolor=(0.2, 0.2, 0.2, 0.35),
-            linewidth=0.35,
-        )
-        if return_values.size > 1:
-            std = return_values.std(ddof=1)
-            bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0
-            if bandwidth > 0:
-                x_grid = np.linspace(return_values.min(), return_values.max(), 300)
-                density = np.exp(
-                    -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
-                ).sum(axis=1) / (return_values.size * bandwidth * np.sqrt(2 * np.pi))
-                ax.plot(
-                    x_grid,
-                    density,
-                    color="black",
-                    linewidth=1.2,
-                    label=(
-                        f"skew={self._round_metric(trade_skewness, 2)}, "
-                        f"kurt={self._round_metric(trade_kurtosis, 2)}"
-                    ),
+        for report_name, filename, title, trades in plot_specs:
+            returns = trades["pnl_pct"].drop_nulls().drop_nans()
+            out_path = self.assets_dir / filename
+            fig, ax = plt.subplots(1, 1, figsize=(cfg.figsize_x, cfg.figsize_y))
+
+            if returns.is_empty():
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No completed trades",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
                 )
-        ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
-        ax.set_title("Trade Return Distribution")
-        ax.set_xlabel("Return (%)")
-        ax.set_ylabel("Density")
-        ax.legend()
-        ax.grid(True, alpha=0.25)
-        fig.tight_layout()
-        fig.savefig(out_path, dpi=150)
-        plt.close(fig)
+            else:
+                trade_skewness = returns.skew()
+                trade_kurtosis = returns.kurtosis()
+                return_values = returns.to_numpy()
+                ax.hist(
+                    return_values,
+                    bins=50,
+                    density=True,
+                    color=(76 / 255, 120 / 255, 168 / 255, 0.85),
+                    edgecolor=(0.2, 0.2, 0.2, 0.35),
+                    linewidth=0.35,
+                )
+                if return_values.size > 1:
+                    std = return_values.std(ddof=1)
+                    bandwidth = 1.06 * std * return_values.size ** (-1 / 5) if std > 0 else 0.0
+                    if bandwidth > 0:
+                        x_grid = np.linspace(return_values.min(), return_values.max(), 300)
+                        density = np.exp(
+                            -0.5 * ((x_grid[:, None] - return_values[None, :]) / bandwidth) ** 2
+                        ).sum(axis=1) / (
+                            return_values.size * bandwidth * np.sqrt(2 * np.pi)
+                        )
+                        ax.plot(
+                            x_grid,
+                            density,
+                            color="black",
+                            linewidth=1.2,
+                            label=(
+                                f"skew={self._round_metric(trade_skewness, 2)}, "
+                                f"kurt={self._round_metric(trade_kurtosis, 2)}"
+                            ),
+                        )
+                        ax.legend()
+                ax.axvline(0.0, color="black", linewidth=0.9, alpha=0.7)
 
-        self.report.append(
-            ReportItem("trade_return_distribution", str(out_path), cfg.importance, "plot")
-        )
+            ax.set_title(title)
+            ax.set_xlabel("Return (%)")
+            ax.set_ylabel("Density")
+            ax.grid(True, alpha=0.25)
+            fig.tight_layout()
+            fig.savefig(out_path, dpi=150)
+            plt.close(fig)
+
+            self.report.append(
+                ReportItem(report_name, str(out_path), cfg.importance, "plot")
+            )
 
     def _plot_drawdown_axis(
         self,
