@@ -11,6 +11,8 @@ from report.report_metrics import (
     MetricsConfig,
     PLOT_MODE,
     PlotConfig,
+    RegressionConfig,
+    RegressionResult,
     ReportItem,
 )
 
@@ -31,12 +33,23 @@ def main() -> None:
                 dd_mode=DRAWDOWN_PLOT_MODE.ALL,
             ),
             plot_equity_ret_distr_cfg=PlotConfig(
+                enabled=True,
                 importance=2,
                 mode=PLOT_MODE.DEFAULT,
             ),
             plot_trade_ret_distr_cfg=PlotConfig(
+                enabled=True,
                 importance=2,
                 mode=PLOT_MODE.DEFAULT,
+            ),
+            regression=RegressionConfig(
+                enabled=True,
+                factors=(
+                    ("SPY",),
+                    ("VGK",),
+                    ("EWJ",),
+                    ("SPY", "IEF", "DBC"),
+                ),
             ),
         ),
         ASSETS_DIR,
@@ -216,6 +229,10 @@ def write_markdown_report(
             item for item in report
             if item.importance == importance and item.kind == "metric"
         ]
+        regressions = [
+            item for item in report
+            if item.importance == importance and item.kind == "regression"
+        ]
 
         section_title = "Key Metrics" if section_idx == 0 else "Metrics"
 
@@ -233,6 +250,27 @@ def write_markdown_report(
             for item in metrics:
                 metric_name, metric_value = _format_metric(item, currency_symbol_)
                 lines.append(f"| {metric_name} | {metric_value} |")
+
+        if regressions:
+            lines.extend([
+                "",
+                "## Regressions",
+                "",
+                "| Factors | Alpha | Beta | R-squared |",
+                "|---|---:|---|---:|",
+            ])
+            for item in regressions:
+                result = item.value
+                if not isinstance(result, RegressionResult):
+                    raise TypeError("regression report item has an invalid value")
+                betas = ", ".join(
+                    f"{ticker}: {_format_value(beta)}"
+                    for ticker, beta in result.betas
+                )
+                lines.append(
+                    f"| {item.name} | {_format_value(result.alpha_pct)}% | "
+                    f"{betas} | {_format_value(result.r_squared)} |"
+                )
 
     REPORT_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
 

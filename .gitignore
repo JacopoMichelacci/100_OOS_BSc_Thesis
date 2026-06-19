@@ -17,4 +17,5 @@ wheels/
 
 # ignore data files and out files
 _data/
+data/_internal/
 output/

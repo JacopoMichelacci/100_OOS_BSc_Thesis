@@ -37,13 +37,22 @@ class PLOT_MODE(Enum):
 
 
 @dataclass(frozen=True)
+class RegressionResult:
+    """OLS coefficients produced for one configured factor group."""
+
+    alpha_pct: float
+    betas: tuple[tuple[str, float], ...]
+    r_squared: float
+
+
+@dataclass(frozen=True)
 class ReportItem:
     """One layout-aware report entry produced by Metrics.run()."""
 
     name: str
-    value: float | int | str
+    value: float | int | str | RegressionResult
     importance: int
-    kind: Literal["metric", "plot"]
+    kind: Literal["metric", "plot", "regression"]
 
 
 
@@ -73,6 +82,17 @@ class EquityCurvePlotConfig:
 
     base: PlotConfig = field(default_factory=PlotConfig)
     dd_mode: DRAWDOWN_PLOT_MODE = DRAWDOWN_PLOT_MODE.ALL
+
+
+@dataclass(frozen=True)
+class RegressionConfig:
+    """Configures univariate and multivariate factor regressions."""
+
+    enabled: bool = True
+    factors: tuple[tuple[str, ...], ...] = ()
+    plot_correlation: bool = True
+    decimals: int = 4
+    importance: int = 3
 
     
 @dataclass(frozen=True)
@@ -104,6 +124,7 @@ class MetricsConfig:
         figsize_y=5.0,
         importance=2,
     )
+    regression: RegressionConfig = field(default_factory=RegressionConfig)
     periods_per_year_override: float = -1.0
 
 
@@ -129,12 +150,14 @@ class Metrics:
         config: MetricsConfig,
         assets_dir: Path,
         cost_bps: float = 0.0,
+        internal_data_dir: Path = Path("data/_internal"),
     ) -> None:
         self.equity_path = equity_path
         self.orders_path = orders_path
         self.config = config
         self.assets_dir = assets_dir
         self.cost_bps = cost_bps
+        self.internal_data_dir = internal_data_dir
 
         self.equity_raw = pl.read_csv(
             self.equity_path,
@@ -171,8 +194,165 @@ class Metrics:
         self.skewness()
         self.kurtosis()
         self.plot_trade_ret_distr()
+        self.regression()
 
         return self.report
+
+    def regression(self) -> None:
+        """Regress daily strategy returns on each configured factor group."""
+        cfg = self.config.regression
+        if not cfg.enabled or not cfg.factors:
+            return
+
+        factor_files: dict[str, Path] = {}
+        for path in self.internal_data_dir.rglob("*.parquet"):
+            if path.stem in factor_files:
+                raise ValueError(f"duplicate internal-data ticker: {path.stem}")
+            factor_files[path.stem] = path
+
+        strategy_returns = (
+            self._resample_equity_daily(self._clean_equity(self.equity_raw))
+            .with_columns(
+                pl.from_epoch("ts", time_unit="ms").dt.date().alias("date"),
+                pl.col("equity").pct_change().alias("strategy_return"),
+            )
+            .select("date", "strategy_return")
+            .drop_nulls()
+        )
+
+        factor_returns: dict[str, pl.DataFrame] = {}
+        for ticker in dict.fromkeys(ticker for group in cfg.factors for ticker in group):
+            path = factor_files.get(ticker)
+            if path is None:
+                raise ValueError(f"internal data not found for ticker: {ticker}")
+
+            column = f"factor_{ticker}"
+            factor_returns[ticker] = (
+                pl.read_parquet(path)
+                .sort("date")
+                .with_columns(pl.col("close").pct_change().alias(column))
+                .select("date", column)
+                .drop_nulls()
+            )
+
+        for factors in cfg.factors:
+            if not factors:
+                raise ValueError("regression factor groups cannot be empty")
+            if len(set(factors)) != len(factors):
+                raise ValueError(
+                    f"regression factor group contains duplicates: {' + '.join(factors)}"
+                )
+
+            regression_data = strategy_returns
+            factor_columns: list[str] = []
+            for ticker in factors:
+                column = f"factor_{ticker}"
+                factor_columns.append(column)
+                regression_data = regression_data.join(
+                    factor_returns[ticker],
+                    on="date",
+                    how="inner",
+                )
+
+            regression_data = regression_data.drop_nans()
+            if regression_data.height <= len(factors) + 1:
+                raise ValueError(
+                    f"not enough aligned observations for regression: {' + '.join(factors)}"
+                )
+
+            y = regression_data["strategy_return"].to_numpy()
+            factor_matrix = regression_data.select(factor_columns).to_numpy()
+            design_matrix = np.column_stack((np.ones(y.size), factor_matrix))
+            coefficients, _, _, _ = np.linalg.lstsq(design_matrix, y, rcond=None)
+            fitted = design_matrix @ coefficients
+            residual_sum = float(np.sum((y - fitted) ** 2))
+            total_sum = float(np.sum((y - y.mean()) ** 2))
+            r_squared = 1.0 - residual_sum / total_sum if total_sum > 0.0 else 0.0
+
+            result = RegressionResult(
+                alpha_pct=round(float(coefficients[0]) * 100.0, cfg.decimals),
+                betas=tuple(
+                    (ticker, round(float(beta), cfg.decimals))
+                    for ticker, beta in zip(factors, coefficients[1:], strict=True)
+                ),
+                r_squared=round(r_squared, cfg.decimals),
+            )
+            self.report.append(
+                ReportItem(
+                    " + ".join(factors),
+                    result,
+                    cfg.importance,
+                    "regression",
+                )
+            )
+
+        if cfg.plot_correlation:
+            correlation_data = strategy_returns.rename(
+                {"strategy_return": "Strategy"}
+            )
+            labels = ["Strategy"]
+            for ticker, returns in factor_returns.items():
+                correlation_data = correlation_data.join(
+                    returns.rename({f"factor_{ticker}": ticker}),
+                    on="date",
+                    how="inner",
+                )
+                labels.append(ticker)
+
+            correlation_data = correlation_data.drop_nans()
+            if correlation_data.height < 2:
+                raise ValueError(
+                    "not enough common observations for the regression correlation plot"
+                )
+
+            correlation = np.corrcoef(
+                correlation_data.select(labels).to_numpy(),
+                rowvar=False,
+            )
+            masked_correlation = np.ma.masked_where(
+                np.triu(np.ones_like(correlation, dtype=bool), k=1),
+                correlation,
+            )
+
+            out_path = self.assets_dir / "regression_correlation.png"
+            figure_size = max(6.0, len(labels) * 1.1)
+            fig, ax = plt.subplots(figsize=(figure_size, figure_size))
+            image = ax.imshow(
+                masked_correlation,
+                cmap="coolwarm",
+                vmin=-1.0,
+                vmax=1.0,
+            )
+            ax.set_title("Strategy and Factor Return Correlations")
+            ax.set_xticks(range(len(labels)), labels=labels, rotation=45, ha="right")
+            ax.set_yticks(range(len(labels)), labels=labels)
+
+            for row in range(len(labels)):
+                for column in range(row + 1):
+                    value = correlation[row, column]
+                    text_color = "white" if abs(value) >= 0.55 else "black"
+                    ax.text(
+                        column,
+                        row,
+                        f"{value:.2f}",
+                        ha="center",
+                        va="center",
+                        color=text_color,
+                        fontsize=8,
+                    )
+
+            fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
+            fig.tight_layout()
+            fig.savefig(out_path, dpi=150)
+            plt.close(fig)
+            self.report.append(
+                ReportItem(
+                    "regression_correlation",
+                    str(out_path),
+                    cfg.importance,
+                    "plot",
+                )
+            )
 
     def _prepare_equity(self, equity: pl.DataFrame) -> pl.DataFrame:
         """Clean equity with epoch-millisecond timestamps and apply resampling."""
