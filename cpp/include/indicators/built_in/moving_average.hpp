@@ -12,26 +12,27 @@
 template <typename Tin, typename Tout>
 class SMA : public Indicator<SMA<Tin, Tout>, Tin, Tout> {
 public:
-    explicit SMA(std::size_t len_) : len(len_) {
-        if (len_ == 0) {throw std::invalid_argument("SMA len must be > 0");}
+    explicit SMA(int len_, int max_buffer_size_ = -1)
+        : Indicator<SMA<Tin, Tout>, Tin, Tout>(max_buffer_size_),
+        len(len_) {
+        if (len_ < 1) {throw std::invalid_argument("SMA len must be > 0");}
         history.reserve(len);
     }
 
 
     std::optional<Tout> compute(const Tin& input) {
-        const Tout val = static_cast<Tout>(input);
-
         //resize history and calc the sum of the new element if full
         if (history.size() < len) {
-            history.push_back(val);
-            sum += val;
+            history.push_back(input);
+            sum += input;
         } else {
             sum -= history[idx];
-            history[idx] = val;
-            sum += val;
+            history[idx] = input;
+            sum += input;
         }
 
-        idx = (++idx) % len;
+        ++idx;
+        if (idx == len) { idx = 0; }
 
         if (history.size() != len) {return std::nullopt;}
         return static_cast<Tout>(sum / history.size());
@@ -47,15 +48,14 @@ public:
         len = len_;
         history.clear();
         history.reserve(len);
-        this->buffer.clear();
-        this->buffer.reserve(64);
+        this->reset_buffer();
         idx = 0;
         sum = 0.0;
     }
 
 private:
     std::size_t len;
-    std::vector<Tout> history;
+    std::vector<Tin> history;
 
     std::size_t idx = 0;
     double sum{};

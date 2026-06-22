@@ -13,7 +13,9 @@
 template <typename Tin, typename Tout>
 class STD : public Indicator<STD<Tin, Tout>, Tin, Tout> {
 public:
-    explicit STD(int len_) : len(len_) {
+    explicit STD(int len_, int max_buffer_size_ = -1)
+        : Indicator<STD<Tin, Tout>, Tin, Tout>(max_buffer_size_),
+        len(len_) {
         // safety checks
         if (len_ < 1) {
             throw std::invalid_argument("std len must be > 0");
@@ -65,8 +67,7 @@ public:
         len = len_;
         history.clear();
         history.reserve(len);
-        this->buffer.clear();
-        this->buffer.reserve(64);
+        this->reset_buffer();
         idx = 0;
         sum = 0.0;
         sqsum = 0.0;
@@ -80,4 +81,3 @@ private:
     double sqsum = 0.0;
     std::size_t idx = 0;
 };
-
