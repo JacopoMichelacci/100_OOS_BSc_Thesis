@@ -49,6 +49,7 @@ def main() -> None:
                     ("VGK",),
                     ("EWJ",),
                     ("SPY", "IEF", "DBC"),
+                    ("BTC-USD",),
                 ),
             ),
         ),

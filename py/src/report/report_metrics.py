@@ -962,10 +962,9 @@ class Metrics:
                 trade_skewness = returns.skew()
                 trade_kurtosis = returns.kurtosis()
                 return_values = returns.to_numpy()
-                ax.hist(
+                _, bin_edges, _ = ax.hist(
                     return_values,
                     bins=50,
-                    density=True,
                     color=(76 / 255, 120 / 255, 168 / 255, 0.85),
                     edgecolor=(0.2, 0.2, 0.2, 0.35),
                     linewidth=0.35,
@@ -980,6 +979,8 @@ class Metrics:
                         ).sum(axis=1) / (
                             return_values.size * bandwidth * np.sqrt(2 * np.pi)
                         )
+                        bin_width = bin_edges[1] - bin_edges[0]
+                        density *= return_values.size * bin_width
                         ax.plot(
                             x_grid,
                             density,
@@ -995,7 +996,7 @@ class Metrics:
 
             ax.set_title(title)
             ax.set_xlabel("Return (%)")
-            ax.set_ylabel("Density")
+            ax.set_ylabel("Trade Count")
             ax.grid(True, alpha=0.25)
             fig.tight_layout()
             fig.savefig(out_path, dpi=150)
