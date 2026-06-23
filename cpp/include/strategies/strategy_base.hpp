@@ -59,12 +59,12 @@ class PositionSizer {
 public:
     PositionSizer() = default;
 
-    double fixed_fractional_price(double equity, double price, double fraction) const {
-        return equity * fraction / price;
+    double fixed_fractional_price(double equity, double price, double equity_pct) const {
+        return equity * equity_pct / price;
     }
 
-    double fixed_fractional_sl(double equity, double sl_notional, double fraction) const {
-        return equity * fraction / sl_notional;
+    double fixed_fractional_sl(double equity, double sl_notional, double equity_pct) const {
+        return equity * equity_pct / sl_notional;
     }
 };
 

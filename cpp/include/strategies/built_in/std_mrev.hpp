@@ -19,8 +19,10 @@ struct Std_MrevConfig {
     double lower_std_thresh = -1.5;
     double upper_std_thresh = 1.5;
 
-    double qty = 1.0;
+
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE;
+    double qty = 1.0;
+    double equity_pct = 0.01;
 };
 
 
@@ -41,6 +43,9 @@ public:
         if (params.qty <= 0.0) {
             throw std::invalid_argument("Std_MRev qty must be positive");
         }
+        if (params.equity_pct <= 0.0 || params.equity_pct > 1.0) {
+            throw std::invalid_argument("Std_MRev equity_pct must be in (0, 1]");
+        }
         if (params.field == nullptr) {
             throw std::invalid_argument("Std_MrevConfig requires field when Tin has no double close field");
         }
@@ -48,9 +53,12 @@ public:
 
     virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
+
+        if (!this->bconfig.active) {
+            return;
+        }
         
         const double value = input.*params.field;
-
         if (!prev_value) {
             prev_value = value;
             return;
@@ -61,6 +69,7 @@ public:
         prev_value = value;
 
         stddev.update_buffer(last_move);
+
         // check if value exist and is != 0
         const auto rolling_std = stddev[-1];
         if (!rolling_std || *rolling_std == 0.0) {
@@ -72,8 +81,11 @@ public:
         // LONG
         if (this->bconfig.long_active) {
             if (standardized_move <= params.lower_std_thresh) {
+                if (!this->bconfig.stacking && ctx.opos > 0.0) {
+                    return;
+                }
                 const double target_qty = calculate_qty(ctx, value);
-                const double buy_qty = target_qty - ctx.opos;
+                const double buy_qty = ctx.opos < 0.0 ? target_qty - ctx.opos : target_qty;
                 if (buy_qty > 0.0) {
                     out.push_back({.signal = SIGNAL::BBUY, .qty = buy_qty, .type = ORDER_TYPE::MARKET});
                 }
@@ -83,8 +95,11 @@ public:
         // SHORT
         if (this->bconfig.short_active) {
             if (standardized_move >= params.upper_std_thresh) {
+                if (!this->bconfig.stacking && ctx.opos < 0.0) {
+                    return;
+                }
                 const double target_qty = calculate_qty(ctx, value);
-                const double sell_qty = target_qty + ctx.opos;
+                const double sell_qty = ctx.opos > 0.0 ? target_qty + ctx.opos : target_qty;
                 if (sell_qty > 0.0) {
                     out.push_back({.signal = SIGNAL::BSELL, .qty = sell_qty, .type = ORDER_TYPE::MARKET});
                 }
@@ -97,7 +112,7 @@ public:
             case SIZING_MODE::FIXED:
                 return params.qty;
             case SIZING_MODE::FIXED_FRACTIONAL_PRICE:
-                return this->sizer.fixed_fractional_price(ctx.equity, price, params.qty);
+                return this->sizer.fixed_fractional_price(ctx.equity, price, params.equity_pct);
             default:
                 throw std::invalid_argument("Std_MRev unsupported sizing mode");
         }

@@ -456,21 +456,11 @@ class Metrics:
                 .alias("signed_qty")
             )
             .filter(pl.col("signed_qty") != 0.0)
-            .with_columns((pl.col("signed_qty") * pl.col("price")).alias("signed_notional"))
             .sort(["ts", "id"])
-            .group_by("ts", maintain_order=True)
-            .agg(
-                pl.col("signed_qty").sum().alias("signed_qty"),
-                pl.col("signed_notional").sum().alias("signed_notional"),
-            )
-            .filter(pl.col("signed_qty") != 0.0)
-            .with_columns((pl.col("signed_notional") / pl.col("signed_qty")).alias("price"))
         )
 
         trades: list[dict[str, float | int | str]] = []
-        position_qty = 0.0
-        entry_price = 0.0
-        entry_ts = 0
+        open_lots: list[dict[str, float | int]] = []
         next_trade_id = 1
 
         for ts_raw, signed_qty_raw, price_raw in (
@@ -482,55 +472,50 @@ class Metrics:
             signed_qty = float(signed_qty_raw)
             price = float(price_raw)
 
-            if position_qty == 0.0:
-                position_qty = signed_qty
-                entry_price = price
-                entry_ts = ts
-                continue
+            remaining_qty = signed_qty
 
-            if position_qty * signed_qty > 0:
-                total_qty = abs(position_qty) + abs(signed_qty)
-                entry_price = (
-                    entry_price * abs(position_qty) + price * abs(signed_qty)
-                ) / total_qty
-                position_qty += signed_qty
-                continue
+            while open_lots and open_lots[0]["qty"] * remaining_qty < 0.0:
+                lot = open_lots[0]
+                close_qty = min(abs(float(lot["qty"])), abs(remaining_qty))
+                side = "long" if lot["qty"] > 0 else "short"
+                entry_price = float(lot["entry_price"])
+                pnl = (
+                    (price - entry_price) * close_qty
+                    if side == "long"
+                    else (entry_price - price) * close_qty
+                )
+                pnl_pct = pnl / (entry_price * close_qty) * 100.0 if entry_price else 0.0
 
-            close_qty = min(abs(position_qty), abs(signed_qty))
-            side = "long" if position_qty > 0 else "short"
-            pnl = (
-                (price - entry_price) * close_qty
-                if side == "long"
-                else (entry_price - price) * close_qty
-            )
-            pnl_pct = pnl / (entry_price * close_qty) * 100.0 if entry_price else 0.0
+                trades.append(
+                    {
+                        "trade_id": next_trade_id,
+                        "entry_ts": int(lot["entry_ts"]),
+                        "exit_ts": ts,
+                        "side": side,
+                        "qty": close_qty,
+                        "entry_price": entry_price,
+                        "exit_price": price,
+                        "pnl": pnl,
+                        "pnl_pct": pnl_pct,
+                    }
+                )
+                next_trade_id += 1
 
-            trades.append(
+                if abs(float(lot["qty"])) == close_qty:
+                    remaining_qty += float(lot["qty"])
+                    open_lots.pop(0)
+                else:
+                    lot["qty"] = float(lot["qty"]) + close_qty * (-1.0 if lot["qty"] > 0 else 1.0)
+                    remaining_qty = 0.0
+
+            if remaining_qty != 0.0:
+                open_lots.append(
                 {
-                    "trade_id": next_trade_id,
-                    "entry_ts": entry_ts,
-                    "exit_ts": ts,
-                    "side": side,
-                    "qty": close_qty,
-                    "entry_price": entry_price,
-                    "exit_price": price,
-                    "pnl": pnl,
-                    "pnl_pct": pnl_pct,
+                    "entry_ts": ts,
+                    "qty": remaining_qty,
+                    "entry_price": price,
                 }
             )
-            next_trade_id += 1
-
-            leftover_qty = signed_qty + position_qty
-            if abs(signed_qty) < abs(position_qty):
-                position_qty += signed_qty
-            elif leftover_qty == 0.0:
-                position_qty = 0.0
-                entry_price = 0.0
-                entry_ts = 0
-            else:
-                position_qty = leftover_qty
-                entry_price = price
-                entry_ts = ts
 
         return pl.DataFrame(trades)
 

@@ -20,6 +20,7 @@ struct MACConfig {
 
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED;
     double qty = 1.0;
+    double equity_pct = 0.05;
 };
 
 template <typename Tin>
@@ -40,10 +41,17 @@ public:
         if (params.fast_field == nullptr || params.slow_field == nullptr) {
             throw std::invalid_argument("MACConfig requires fast_field and slow_field when Tin has no double close field");
         }
+        if (params.equity_pct <= 0.0 || params.equity_pct > 1.0) {
+            throw std::invalid_argument("MAC equity_pct must be in (0, 1]");
+        }
     }
 
     virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
+
+        if (!this->bconfig.active) {
+            return;
+        }
 
         fast_sma.update_buffer(input.*params.fast_field);
         slow_sma.update_buffer(input.*params.slow_field);
@@ -56,8 +64,12 @@ public:
         // LONG 
         if (this->bconfig.long_active) {
             if (fast_sma[-1] >= slow_sma[-1] && fast_sma[-2] < slow_sma[-2]) {
+                if (!this->bconfig.stacking && ctx.opos > 0.0) {
+                    return;
+                }
                 const double target_qty = calculate_qty(ctx, input);
-                out.push_back({.signal = SIGNAL::BBUY, .qty = target_qty - ctx.opos, .type = ORDER_TYPE::MARKET});
+                const double buy_qty = ctx.opos < 0.0 ? target_qty - ctx.opos : target_qty;
+                out.push_back({.signal = SIGNAL::BBUY, .qty = buy_qty, .type = ORDER_TYPE::MARKET});
             }
         }
 
@@ -65,8 +77,12 @@ public:
         // SHORT
         if (this->bconfig.short_active) {
             if (fast_sma[-1] <= slow_sma[-1] && fast_sma[-2] > slow_sma[-2]) {
+                if (!this->bconfig.stacking && ctx.opos < 0.0) {
+                    return;
+                }
                 const double target_qty = calculate_qty(ctx, input);
-                out.push_back({.signal = SIGNAL::BSELL, .qty = target_qty + ctx.opos, .type = ORDER_TYPE::MARKET});
+                const double sell_qty = ctx.opos > 0.0 ? target_qty + ctx.opos : target_qty;
+                out.push_back({.signal = SIGNAL::BSELL, .qty = sell_qty, .type = ORDER_TYPE::MARKET});
             }
         }
 
@@ -78,7 +94,7 @@ public:
             case SIZING_MODE::FIXED:
                 return params.qty;
             case SIZING_MODE::FIXED_FRACTIONAL_PRICE:
-                return this->sizer.fixed_fractional_price(ctx.equity, input.*params.fast_field, params.qty);
+                return this->sizer.fixed_fractional_price(ctx.equity, input.*params.fast_field, params.equity_pct);
             default:
                 throw std::invalid_argument("MAC unsupported sizing mode");
         }
