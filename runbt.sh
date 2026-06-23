@@ -10,7 +10,7 @@ mkdir -p "$ASSETS_DIR"
 
 find "$ASSETS_DIR" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
-"$ROOT_DIR/cpp/brun.sh"
+"$ROOT_DIR/cpp/runbt.sh"
 
 if [[ ! -f "$EQUITY_FILE" || ! -f "$ORDERS_FILE" ]]; then
     echo "missing backtest output files in $ASSETS_DIR" >&2
