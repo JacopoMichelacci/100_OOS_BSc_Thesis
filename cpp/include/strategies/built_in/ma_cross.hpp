@@ -28,8 +28,8 @@ public:
         : Strategy<Tin>(detail::resolve_name(name_, __FILE__), base_config_),
         params(params_),
 
-        fast_sma(params_.fast_len),
-        slow_sma(params_.slow_len) {
+        fast_sma(params_.fast_len, 2),
+        slow_sma(params_.slow_len, 2) {
 
         //safety checks
         if (params.fast_len >= params.slow_len || params.fast_len < 1 || params.slow_len < 1) {
