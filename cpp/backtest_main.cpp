@@ -8,7 +8,7 @@
 #include "core/market_events.hpp"
 
 
-#include "strategies/built_in/ma_cross.hpp"
+#include "strategies/built_in/std_mrev.hpp"
 #include "backtest/backtest.hpp"
 #include "backtest/backtest_io.hpp"
 
@@ -23,9 +23,10 @@ int main() {
 
     
     // 2. set up strategy
-    MAC<OHLCVEvent> strat("mac_demo", MACConfig<OHLCVEvent>{
-        .fast_len = 50,
-        .slow_len = 100,
+    Std_MRev<OHLCVEvent> strat("std_mrev_demo", Std_MrevConfig<OHLCVEvent>{
+        .std_len = 15,
+        .lower_std_thresh = -2.5,
+        .upper_std_thresh = 2.5,
         .qty = 1.0
     });
 

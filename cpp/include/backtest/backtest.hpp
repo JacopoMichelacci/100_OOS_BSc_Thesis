@@ -52,7 +52,11 @@ public:
 
             // call on data
             plog.clear();
-            strat.on_data(in, opos, plog);
+            StrategyContext ctx{
+                .opos = opos,
+                .equity = cash + opos * in.close
+            };
+            strat.on_data(in, ctx, plog);
 
             // mtm update
             results.equity_curve.emplace_back(cash + opos * in.close);

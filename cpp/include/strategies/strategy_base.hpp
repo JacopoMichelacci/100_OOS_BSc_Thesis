@@ -42,7 +42,35 @@ struct StrategyConfig {
 };
 
 
+struct StrategyContext {
+    double opos = 0.0;
+    double equity = 0.0;
+};
+
+
+enum class SIZING_MODE {
+    FIXED,
+    FIXED_FRACTIONAL_PRICE,
+    FIXED_FRACTIONAL_SL
+};
+
+
+class PositionSizer {
+public:
+    PositionSizer() = default;
+
+    double fixed_fractional_price(double equity, double price, double fraction) const {
+        return equity * fraction / price;
+    }
+
+    double fixed_fractional_sl(double equity, double sl_notional, double fraction) const {
+        return equity * fraction / sl_notional;
+    }
+};
+
+
 struct SharedStrategyBase {
+protected:
     inline static std::atomic<long long> id_state = 0;
 };
 template <typename Tin>
@@ -62,7 +90,7 @@ public:
     virtual ~Strategy() = default;
 
     // works for: Live and Backtest -- generates a vector of OrderEvents
-    virtual void on_data(const Tin& input, double opos, std::vector<OrderEvent>& out) = 0;
+    virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) = 0;
 
 
     // getters
@@ -81,6 +109,8 @@ protected:
     // base config
     StrategyConfig bconfig;
 
+    PositionSizer sizer;
+
 
     // resolves the right timestamp type at compile time
     long long resolve_ts(const Tin& input) {
@@ -97,5 +127,3 @@ protected:
         }
     }
 };
-
-

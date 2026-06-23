@@ -20,6 +20,7 @@ struct Std_MrevConfig {
     double upper_std_thresh = 1.5;
 
     double qty = 1.0;
+    SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE;
 };
 
 
@@ -45,7 +46,7 @@ public:
         }
     }
 
-    virtual void on_data(const Tin& input, double opos, std::vector<OrderEvent>& out) override {
+    virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
         
         const double value = input.*params.field;
@@ -68,11 +69,11 @@ public:
 
         const double standardized_move = last_move / *rolling_std;
 
-
         // LONG
         if (this->bconfig.long_active) {
             if (standardized_move <= params.lower_std_thresh) {
-                const double buy_qty = params.qty - opos;
+                const double target_qty = calculate_qty(ctx, value);
+                const double buy_qty = target_qty - ctx.opos;
                 if (buy_qty > 0.0) {
                     out.push_back({.signal = SIGNAL::BBUY, .qty = buy_qty, .type = ORDER_TYPE::MARKET});
                 }
@@ -82,11 +83,23 @@ public:
         // SHORT
         if (this->bconfig.short_active) {
             if (standardized_move >= params.upper_std_thresh) {
-                const double sell_qty = params.qty + opos;
+                const double target_qty = calculate_qty(ctx, value);
+                const double sell_qty = target_qty + ctx.opos;
                 if (sell_qty > 0.0) {
                     out.push_back({.signal = SIGNAL::BSELL, .qty = sell_qty, .type = ORDER_TYPE::MARKET});
                 }
             }
+        }
+    }
+
+    double calculate_qty(const StrategyContext& ctx, double price) const {
+        switch (params.pos_sizing_mode) {
+            case SIZING_MODE::FIXED:
+                return params.qty;
+            case SIZING_MODE::FIXED_FRACTIONAL_PRICE:
+                return this->sizer.fixed_fractional_price(ctx.equity, price, params.qty);
+            default:
+                throw std::invalid_argument("Std_MRev unsupported sizing mode");
         }
     }
 

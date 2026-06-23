@@ -18,6 +18,7 @@ struct MACConfig {
     int16_t slow_len = 30;
     double Tin::* slow_field = default_close_field<Tin>();
 
+    SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED;
     double qty = 1.0;
 };
 
@@ -41,7 +42,7 @@ public:
         }
     }
 
-    virtual void on_data(const Tin& input, double opos, std::vector<OrderEvent>& out) override {
+    virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) override {
         tc.update(this->resolve_ts(input));
 
         fast_sma.update_buffer(input.*params.fast_field);
@@ -52,11 +53,11 @@ public:
             return;
         }
 
-
         // LONG 
         if (this->bconfig.long_active) {
             if (fast_sma[-1] >= slow_sma[-1] && fast_sma[-2] < slow_sma[-2]) {
-                out.push_back({.signal = SIGNAL::BBUY, .qty = params.qty - opos, .type = ORDER_TYPE::MARKET});
+                const double target_qty = calculate_qty(ctx, input);
+                out.push_back({.signal = SIGNAL::BBUY, .qty = target_qty - ctx.opos, .type = ORDER_TYPE::MARKET});
             }
         }
 
@@ -64,11 +65,23 @@ public:
         // SHORT
         if (this->bconfig.short_active) {
             if (fast_sma[-1] <= slow_sma[-1] && fast_sma[-2] > slow_sma[-2]) {
-                out.push_back({.signal = SIGNAL::BSELL, .qty = params.qty + opos, .type = ORDER_TYPE::MARKET});
+                const double target_qty = calculate_qty(ctx, input);
+                out.push_back({.signal = SIGNAL::BSELL, .qty = target_qty + ctx.opos, .type = ORDER_TYPE::MARKET});
             }
         }
 
         
+    }
+
+    double calculate_qty(const StrategyContext& ctx, const Tin& input) const {
+        switch (params.pos_sizing_mode) {
+            case SIZING_MODE::FIXED:
+                return params.qty;
+            case SIZING_MODE::FIXED_FRACTIONAL_PRICE:
+                return this->sizer.fixed_fractional_price(ctx.equity, input.*params.fast_field, params.qty);
+            default:
+                throw std::invalid_argument("MAC unsupported sizing mode");
+        }
     }
 
 private:
