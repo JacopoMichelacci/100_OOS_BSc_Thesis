@@ -4,6 +4,7 @@
 #include <string>
 
 #include "utils/csv_loader.hpp"
+#include "utils/data_window.hpp"
 #include "utils/timer.hpp"
 #include "core/market_events.hpp"
 
@@ -19,7 +20,15 @@ int main() {
 
     // 1. load data
     const std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
-    auto data = load_csv<OHLCVEvent>(data_path);
+    const std::string start_date = "";
+    const std::string end_date = "";
+    const double oos_split_pct = 0.25;
+
+    auto all_data = load_csv<OHLCVEvent>(data_path);
+    const bool use_date_split = !start_date.empty() || !end_date.empty();
+    auto data = use_date_split
+        ? filter_by_date(all_data, start_date, end_date)
+        : split_by_pct(all_data, oos_split_pct, DATA_SPLIT_SIDE::LAST);
 
     
     // 2. set up strategy
@@ -49,7 +58,12 @@ int main() {
         data_path,
         bt_config.cost_bps,
         bt_config.currency,
-        "output/backtest/_assets"
+        "output/backtest/_assets",
+        start_date,
+        end_date,
+        oos_split_pct,
+        first_date(data),
+        last_date(data)
     );
     write_backtest_results(data, results, "output/backtest/_assets");
 

@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "utils/csv_loader.hpp"
+#include "utils/data_window.hpp"
 #include "utils/timer.hpp"
 #include "core/market_events.hpp"
 #include "strategies/built_in/std_mrev.hpp"
@@ -192,7 +193,16 @@ int main() {
     const auto opt_start = std::chrono::steady_clock::now();
 
     const std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
-    auto data = load_csv<OHLCVEvent>(data_path);
+    const std::string start_date = "";
+    const std::string end_date = "";
+    const double oos_split_pct = 0.25;
+    const double is_split_pct = 1.0 - oos_split_pct;
+
+    auto all_data = load_csv<OHLCVEvent>(data_path);
+    const bool use_date_split = !start_date.empty() || !end_date.empty();
+    auto data = use_date_split
+        ? filter_by_date(all_data, start_date, end_date)
+        : split_by_pct(all_data, is_split_pct, DATA_SPLIT_SIDE::FIRST);
 
     BacktestConfig bt_config{
         .initial_capital = 100'000.0,
@@ -250,6 +260,11 @@ int main() {
     metadata << "key,value\n";
     metadata << "strategy,Std_MRev\n";
     metadata << "data," << std::filesystem::path(data_path).stem().string() << "\n";
+    metadata << "start_date," << start_date << "\n";
+    metadata << "end_date," << end_date << "\n";
+    metadata << "is_start_date," << first_date(data) << "\n";
+    metadata << "is_end_date," << last_date(data) << "\n";
+    metadata << "is_split_pct," << is_split_pct << "\n";
     metadata << "optimized_param,threshold\n";
     metadata << "fixed_std_len," << std_len << "\n";
     metadata << "objective,sharpe\n";

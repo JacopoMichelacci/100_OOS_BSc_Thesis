@@ -16,7 +16,12 @@ inline void write_backtest_metadata(
     const std::string& data_path,
     double cost_bps = 0.0,
     std::string_view currency = "$",
-    const std::string& out_dir = "output/backtest/_assets"
+    const std::string& out_dir = "output/backtest/_assets",
+    const std::string& start_date = "",
+    const std::string& end_date = "",
+    double oos_split_pct = 1.0,
+    const std::string& run_start_date = "",
+    const std::string& run_end_date = ""
 ) {
     // Keep run metadata beside the generated data assets.
     std::filesystem::create_directories(out_dir);
@@ -35,6 +40,11 @@ inline void write_backtest_metadata(
     metadata_out << "data," << data_name << "\n";
     metadata_out << "currency," << currency << "\n";
     metadata_out << "cost_bps," << cost_bps << "\n";
+    metadata_out << "start_date," << start_date << "\n";
+    metadata_out << "end_date," << end_date << "\n";
+    metadata_out << "oos_split_pct," << oos_split_pct << "\n";
+    metadata_out << "run_start_date," << run_start_date << "\n";
+    metadata_out << "run_end_date," << run_end_date << "\n";
 }
 
 template <typename Tin>

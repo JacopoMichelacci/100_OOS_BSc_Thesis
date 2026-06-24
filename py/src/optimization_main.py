@@ -69,7 +69,7 @@ def plot_metric_lines(results: pl.DataFrame, optimized_param: str) -> Path:
         .sort(optimized_param)
     )
 
-    fig, axes = plt.subplots(len(METRICS), 1, figsize=(9, 10), sharex=True)
+    fig, axes = plt.subplots(len(METRICS), 1, figsize=(9, 7.6), sharex=True)
     x_values = line_data[optimized_param].to_list()
 
     for metric_ax, (metric, label, color) in zip(axes, METRICS):
@@ -107,25 +107,20 @@ def write_markdown_report(metadata: dict[str, str], plot_path: Path) -> None:
     lines = [
         "# Optimization Report",
         "",
-        "## Metadata",
-        "",
         "| Field | Value |",
         "|---|---|",
         f"| Strategy | {metadata.get('strategy', '')} |",
         f"| Data | {metadata.get('data', '')} |",
+        f"| IS start date | {metadata.get('is_start_date', '')} |",
+        f"| IS end date | {metadata.get('is_end_date', '')} |",
+        f"| IS split | {metadata.get('is_split_pct', '')} |",
         f"| Optimized parameter | {optimized_param} |",
         f"| Fixed std_len | {fixed_std_len} |",
         f"| Objective | {metadata.get('objective', '')} |",
-        "",
-        "## Best Parameters",
-        "",
-        "| Parameter | Value |",
-        "|---|---:|",
-        f"| std_len | {fixed_std_len} |",
-        f"| threshold | {best_threshold} |",
+        f"| Best threshold | {best_threshold} |",
         f"| Sharpe | {best_sharpe} |",
         "",
-        "## Metric Line Plots",
+        "## Metric Line Plot",
         "",
         f"![](_assets/{plot_path.name})",
     ]
