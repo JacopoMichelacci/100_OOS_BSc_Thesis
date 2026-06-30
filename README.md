@@ -29,6 +29,11 @@ Compare two optimization protocols on the same real test window:
    - Optimize strategies on synthetic market paths.
    - Test the frozen strategies on the same real out-of-sample window.
 
+### Optimization methodology
+Strategy parameters are selected discretionally in both protocols rather than by blindly maximizing a single metric. The goal is to avoid clear overfitting by choosing parameter regions that look robust across nearby values.
+
+For historical optimization, this means inspecting the in-sample optimization profile and selecting stable areas rather than isolated peaks. For synthetic-market optimization, results should be averaged across multiple synthetic runs when possible, so the selected parameter reflects performance that is robust across generated market paths rather than lucky on one path.
+
 ### Strategies
 - Volatility strategy
 - Momentum strategy
