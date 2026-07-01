@@ -1,0 +1,107 @@
+\documentclass[12pt,a4paper]{report}
+
+% Page layout: UniBo page says 2 cm margins.
+\usepackage[a4paper,margin=2cm]{geometry}
+
+% Times-like font.
+\usepackage{newtxtext}
+\usepackage{newtxmath}
+
+% Line spacing: UniBo allows 1 or 1.5.
+\usepackage{setspace}
+\onehalfspacing
+
+% Core packages.
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{hyperref}
+
+% Cleaner hyperlinks.
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=black,
+    urlcolor=blue
+}
+
+% Thesis metadata.
+\newcommand{\ThesisTitle}{Backtesting and Synthetic Market Evaluation of Trading Strategies}
+\newcommand{\AuthorName}{Jacopo Michelacci}
+\newcommand{\SupervisorName}{Prof. Giovanni Cardillo}
+\newcommand{\DegreeProgramme}{Bachelor's Degree in Management and Economics}
+\newcommand{\AcademicYear}{2025/2026}
+
+\begin{document}
+
+\hypersetup{pageanchor=false}
+\begin{titlepage}
+    \begin{center}
+        {\Large Alma Mater Studiorum -- Universit\`a di Bologna}
+
+        \vspace{0.8cm}
+
+        {\large \DegreeProgramme}
+
+        \vspace{2.5cm}
+
+        {\Huge\bfseries \ThesisTitle}
+
+        \vfill
+
+        \begin{minipage}{0.45\textwidth}
+            \raggedright
+            Supervisor:\\
+            \SupervisorName
+        \end{minipage}
+        \hfill
+        \begin{minipage}{0.45\textwidth}
+            \raggedleft
+            Candidate:\\
+            \AuthorName
+        \end{minipage}
+
+        \vspace{2cm}
+
+        Academic Year \AcademicYear
+    \end{center}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+\pagenumbering{roman}
+
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+\input{chapters/abstract}
+
+\tableofcontents
+\clearpage
+
+\pagenumbering{arabic}
+
+\chapter{Introduction}
+\input{chapters/01_introduction}
+
+\chapter{Methodology}
+\input{chapters/02_methodology}
+
+\chapter{Trading Strategies}
+\input{chapters/03_trading_strategies}
+
+\chapter{Optimization}
+\input{chapters/04_optimization}
+
+\chapter{Synthetic Market Generation}
+\input{chapters/05_synthetic_market_generation}
+
+\chapter{Results}
+\input{chapters/06_results}
+
+\chapter{Conclusion}
+\input{chapters/07_conclusion}
+
+\end{document}
