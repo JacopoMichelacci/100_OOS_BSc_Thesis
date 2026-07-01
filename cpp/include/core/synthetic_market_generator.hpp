@@ -332,7 +332,7 @@ public:
                 }
 
                 if (!accepted) {
-                    throw std::runtime_error("gen_gbm_rolling_vol_threshold failed to sample inside threshold");
+                    close = std::clamp(close, lower_bound, upper_bound);
                 }
 
                 const double open = prev_close;

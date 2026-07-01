@@ -19,6 +19,13 @@ add_executable(
     src/core/order_events.cpp
 )
 
+add_executable(
+    synthetic_compare
+    synthetic_main.cpp
+    src/core/market_events.cpp
+    src/core/order_events.cpp
+)
+
 target_include_directories(
     ${PROJECT_NAME}
     PRIVATE
@@ -31,7 +38,14 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
+target_include_directories(
+    synthetic_compare
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     target_compile_options(${PROJECT_NAME} PRIVATE -Wno-reorder-init-list)
     target_compile_options(optimizer PRIVATE -Wno-reorder-init-list)
+    target_compile_options(synthetic_compare PRIVATE -Wno-reorder-init-list)
 endif()
