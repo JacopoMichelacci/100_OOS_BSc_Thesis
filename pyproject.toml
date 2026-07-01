@@ -11,7 +11,6 @@ dependencies = [
     "pandas>=3.0.3",
     "polars>=1.41.2",
     "pyarrow>=24.0.0",
-    "pybind11>=3.0.4",
     "quantolib>=0.0.12",
     "tqdm>=4.67.3",
     "weasyprint>=69.0",
