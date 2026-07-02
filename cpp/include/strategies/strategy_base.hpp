@@ -45,6 +45,7 @@ struct StrategyConfig {
 struct StrategyContext {
     double opos = 0.0;
     double equity = 0.0;
+    std::vector<OrderEvent> oposlog;
 };
 
 

@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <span>
+#include <algorithm>
 
 #include "core/order_events.hpp"
 #include "strategies/strategy_base.hpp"
@@ -34,7 +35,7 @@ public:
 
         double cash = cfg.initial_capital;
         double opos = 0.0;
-        double eprice = 0.0;
+        std::vector<OrderEvent> oposlog;
         OrderIdGenerator id_gen;
         std::vector<OrderEvent> plog;
         plog.reserve(4);
@@ -45,7 +46,7 @@ public:
             const auto& in = input[i];
 
             // execute pending orders (no look ahead)
-            execute_orders(plog, in.open, in.ts, cash, opos, eprice, id_gen, strat);
+            execute_orders(plog, in.open, in.ts, cash, opos, oposlog, id_gen, strat);
 
             // hlog update
             results.hlog.insert(results.hlog.end(), plog.begin(), plog.end());
@@ -90,13 +91,52 @@ private:
         order.status = ORDER_STATUS::FILLED;
     }
 
+    void add_open_lot(std::vector<OrderEvent>& oposlog,
+                      const OrderEvent& order,
+                      SIGNAL side,
+                      double qty) {
+        if (qty <= 0.0) return;
+
+        OrderEvent lot = order;
+        lot.signal = side;
+        lot.qty = qty;
+        lot.status = ORDER_STATUS::FILLED;
+        lot.reason = "";
+        oposlog.emplace_back(lot);
+    }
+
+    void close_open_lots(std::vector<OrderEvent>& oposlog,
+                         SIGNAL side,
+                         double qty) {
+        double remaining = qty;
+        
+        // traverse oposlog and reduce quantity with FIFO
+        for (auto it = oposlog.begin(); it != oposlog.end() && remaining > 0.0;) {
+            if (it->signal != side) {
+                ++it;
+                continue;
+            }
+
+            const double closed_qty = std::min(it->qty, remaining);
+            it->qty -= closed_qty;
+            remaining -= closed_qty;
+
+            if (it->qty <= 0.0) {
+                it = oposlog.erase(it);
+            }
+            else {
+                ++it;
+            }
+        }
+    }
+
 
     void execute_orders(std::vector<OrderEvent>& orders,
                         double exec_price,
                         long long exec_ts,
                         double& cash,
                         double& opos,
-                        double& eprice,
+                        std::vector<OrderEvent>& oposlog,
                         OrderIdGenerator& id_gen,
                         Strategy<Tin>& strat) {
 
@@ -115,49 +155,75 @@ private:
 
             switch (ord.signal) {
                 case SIGNAL::LONG:
-                    if (!sc.long_active)              { reject(ord, "longs disabled");                break; }
-                    if (opos < 0)                     { reject(ord, "LONG while short");              break; }
-                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled");             break; }
-                    eprice = exec_price;
+                    if (!sc.long_active)              { reject(ord, "longs disabled"); break; }
+                    if (opos < 0)                     { reject(ord, "LONG while short"); break; }
+                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); break; }
                     fill_buy(ord, exec_price, cash, opos);
+                    add_open_lot(oposlog, ord, SIGNAL::LONG, ord.qty);
                     break;
 
                 case SIGNAL::SHORT:
-                    if (!sc.short_active)             { reject(ord, "shorts disabled");               break; }
-                    if (opos > 0)                     { reject(ord, "SHORT while long");              break; }
-                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled");             break; }
-                    eprice = exec_price;
+                    if (!sc.short_active)             { reject(ord, "shorts disabled"); break; }
+                    if (opos > 0)                     { reject(ord, "SHORT while long"); break; }
+                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); break; }
                     fill_sell(ord, exec_price, cash, opos);
+                    add_open_lot(oposlog, ord, SIGNAL::SHORT, ord.qty);
                     break;
 
                 case SIGNAL::SELL:
-                    if (opos <= 0)                    { reject(ord, "SELL while not long");           break; }
+                    if (opos <= 0)                    { reject(ord, "SELL while not long"); break; }
+                    if (ord.qty > opos)               { reject(ord, "SELL exceeds long position"); break; }
                     fill_sell(ord, exec_price, cash, opos);
-                    if (opos == 0) eprice = 0.0;
+                    close_open_lots(oposlog, SIGNAL::LONG, ord.qty);
                     break;
 
                 case SIGNAL::COVER:
-                    if (opos >= 0)                    { reject(ord, "COVER while not short");         break; }
+                    if (opos >= 0)                    { reject(ord, "COVER while not short"); break; }
+                    if (ord.qty > -opos)              { reject(ord, "COVER exceeds short position"); break; }
                     fill_buy(ord, exec_price, cash, opos);
-                    if (opos == 0) eprice = 0.0;
+                    close_open_lots(oposlog, SIGNAL::SHORT, ord.qty);
                     break;
 
                 case SIGNAL::BBUY:
                     if (!sc.long_active && (opos >= 0 || ord.qty > -opos)) {
                         reject(ord, "longs disabled"); break;
                     }
-                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled");             break; }
+                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); break; }
+                    {
+                    const double prev_opos = opos;
                     fill_buy(ord, exec_price, cash, opos);
-                    if (opos == ord.qty) eprice = exec_price;
+
+                    // have meaningful and signal independent oposlog
+                    if (prev_opos < 0.0) {
+                        close_open_lots(oposlog, SIGNAL::SHORT, std::min(ord.qty, -prev_opos));
+                    }
+                    if (prev_opos >= 0.0) {
+                        add_open_lot(oposlog, ord, SIGNAL::LONG, ord.qty);
+                    }
+                    else if (opos > 0.0) {
+                        add_open_lot(oposlog, ord, SIGNAL::LONG, opos);
+                    }
+                    }
                     break;
 
                 case SIGNAL::BSELL:
                     if (!sc.short_active && (opos <= 0 || ord.qty > opos)) {
                         reject(ord, "shorts disabled"); break;
                     }
-                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled");             break; }
+                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); break; }
+                    {
+                    const double prev_opos = opos;
                     fill_sell(ord, exec_price, cash, opos);
-                    if (opos == -ord.qty) eprice = exec_price;
+                    if (prev_opos > 0.0) {
+                        close_open_lots(oposlog, SIGNAL::LONG, std::min(ord.qty, prev_opos));
+                    }
+                    if (prev_opos <= 0.0) {
+                        add_open_lot(oposlog, ord, SIGNAL::SHORT, ord.qty);
+                    }
+                    else if (opos < 0.0) {
+                        add_open_lot(oposlog, ord, SIGNAL::SHORT, -opos);
+                    }
+                    }
                     break;
 
                 default: break;
