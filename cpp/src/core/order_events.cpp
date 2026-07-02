@@ -42,6 +42,17 @@ std::ostream& operator<<(std::ostream& os, ORDER_TYPE type) {
 }
 
 
+// STOP TYPE
+std::ostream& operator<<(std::ostream& os, STOP_TYPE type) {
+    switch (type) {
+        case (STOP_TYPE::NONE): {return os << "none";}
+        case (STOP_TYPE::HARD): {return os << "hard";}
+    }
+
+    return os;
+}
+
+
 // ORDER EVENT
 std::ostream& operator<<(std::ostream& os, const OrderEvent& ev) {
     os << "OrderEvent{"
@@ -51,6 +62,9 @@ std::ostream& operator<<(std::ostream& os, const OrderEvent& ev) {
        << ", signal="      << ev.signal
        << ", qty="       << ev.qty
        << ", price="     << ev.price
+       << ", sl_type="   << ev.sl.type
+       << ", slnot="     << ev.sl.slnot
+       << ", slpct="     << ev.sl.slpct
        << ", status="    << ev.status
        << ", strat_id="  << ev.strategy_id;
     

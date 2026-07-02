@@ -18,6 +18,9 @@ struct MACConfig {
     int16_t slow_len = 30;
     double Tin::* slow_field = default_close_field<Tin>();
 
+    double slnot = -1.0;
+    double slpct = -1.0;
+
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED;
     double qty = 1.0;
     double equity_pct = 0.05;
@@ -53,6 +56,7 @@ public:
             return;
         }
 
+        // update indicators
         fast_sma.update_buffer(input.*params.fast_field);
         slow_sma.update_buffer(input.*params.slow_field);
 
@@ -69,7 +73,8 @@ public:
                 }
                 const double target_qty = calculate_qty(ctx, input);
                 const double buy_qty = ctx.opos < 0.0 ? target_qty - ctx.opos : target_qty;
-                out.push_back({.signal = SIGNAL::BBUY, .qty = buy_qty, .type = ORDER_TYPE::MARKET});
+                out.push_back({.signal = SIGNAL::BBUY, .type = ORDER_TYPE::MARKET, .qty = buy_qty,
+                    .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
             }
         }
 
@@ -82,7 +87,8 @@ public:
                 }
                 const double target_qty = calculate_qty(ctx, input);
                 const double sell_qty = ctx.opos > 0.0 ? target_qty + ctx.opos : target_qty;
-                out.push_back({.signal = SIGNAL::BSELL, .qty = sell_qty, .type = ORDER_TYPE::MARKET});
+                out.push_back({.signal = SIGNAL::BSELL, .type = ORDER_TYPE::MARKET, .qty = sell_qty,
+                    .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
             }
         }
 

@@ -4,6 +4,8 @@
 #include <vector>
 #include <span>
 #include <algorithm>
+#include <iostream>
+#include <cmath>
 
 #include "core/order_events.hpp"
 #include "strategies/strategy_base.hpp"
@@ -48,14 +50,18 @@ public:
             // execute pending orders (no look ahead)
             execute_orders(plog, in.open, in.ts, cash, opos, oposlog, id_gen, strat);
 
-            // hlog update
+            // hlog update1
             results.hlog.insert(results.hlog.end(), plog.begin(), plog.end());
+
+            // execute stop losses
+            execute_stop_losses(oposlog, in.high, in.low, in.ts, cash, opos, results.hlog, id_gen, strat);
 
             // call on data
             plog.clear();
             StrategyContext ctx{
                 .opos = opos,
-                .equity = cash + opos * in.close
+                .equity = cash + opos * in.close,
+                .oposlog = oposlog
             };
             strat.on_data(in, ctx, plog);
 
@@ -70,6 +76,14 @@ public:
 private:
     BacktestConfig cfg;
     BacktestResults results;
+    static constexpr double qty_eps = 1e-12;
+
+
+    void normalize_opos(double& opos) {
+        if (std::abs(opos) <= qty_eps) {
+            opos = 0.0;
+        }
+    }
 
 
     void reject(OrderEvent& order, const std::string& reason) {
@@ -81,6 +95,7 @@ private:
         double cost = exec_price * order.qty * (cfg.cost_bps / 10000.0);
         cash -= exec_price * order.qty + cost;
         opos += order.qty;
+        normalize_opos(opos);
         order.status = ORDER_STATUS::FILLED;
     }
 
@@ -88,6 +103,7 @@ private:
         double cost = exec_price * order.qty * (cfg.cost_bps / 10000.0);
         cash += exec_price * order.qty - cost;
         opos -= order.qty;
+        normalize_opos(opos);
         order.status = ORDER_STATUS::FILLED;
     }
 
@@ -95,7 +111,7 @@ private:
                       const OrderEvent& order,
                       SIGNAL side,
                       double qty) {
-        if (qty <= 0.0) return;
+        if (qty <= qty_eps) return;
 
         OrderEvent lot = order;
         lot.signal = side;
@@ -121,12 +137,102 @@ private:
             it->qty -= closed_qty;
             remaining -= closed_qty;
 
-            if (it->qty <= 0.0) {
+            if (it->qty <= qty_eps) {
                 it = oposlog.erase(it);
             }
             else {
                 ++it;
             }
+        }
+    }
+
+    bool has_valid_sl(const OrderEvent& lot) const {
+        if (lot.sl.type != STOP_TYPE::HARD) {
+            return false;
+        }
+
+        if (lot.sl.slnot > 0.0 && lot.sl.slpct > 0.0) {
+            static bool warned_dual_sl = false;
+            if (!warned_dual_sl) {
+                std::cerr << "warning: both slnot and slpct are set. using tighter stop loss.\n";
+                warned_dual_sl = true;
+            }
+        }
+
+        return lot.sl.slnot > 0.0 || lot.sl.slpct > 0.0;
+    }
+
+    double stop_price(const OrderEvent& lot) const {
+        const bool has_slnot = lot.sl.slnot > 0.0;
+        const bool has_slpct = lot.sl.slpct > 0.0;
+
+        if (lot.signal == SIGNAL::LONG) {
+            const double pct_stop = lot.price * (1.0 - lot.sl.slpct);
+            const double not_stop = lot.price - lot.sl.slnot;
+
+            if (has_slnot && has_slpct) return std::max(pct_stop, not_stop);
+            if (has_slpct) return pct_stop;
+            return not_stop;
+        }
+
+        const double pct_stop = lot.price * (1.0 + lot.sl.slpct);
+        const double not_stop = lot.price + lot.sl.slnot;
+
+        if (has_slnot && has_slpct) return std::min(pct_stop, not_stop);
+        if (has_slpct) return pct_stop;
+        return not_stop;
+    }
+
+    bool stop_hit(const OrderEvent& lot, double high, double low, double stop) const {
+        if (lot.signal == SIGNAL::LONG) {
+            return low <= stop;
+        }
+        if (lot.signal == SIGNAL::SHORT) {
+            return high >= stop;
+        }
+        return false;
+    }
+
+    void execute_stop_losses(std::vector<OrderEvent>& oposlog,
+                             double high,
+                             double low,
+                             long long exec_ts,
+                             double& cash,
+                             double& opos,
+                             std::vector<OrderEvent>& hlog,
+                             OrderIdGenerator& id_gen,
+                             Strategy<Tin>& strat) {
+
+        for (auto it = oposlog.begin(); it != oposlog.end();) {
+            if (!has_valid_sl(*it)) {
+                ++it;
+                continue;
+            }
+
+            const double stop = stop_price(*it);
+            if (!stop_hit(*it, high, low, stop)) {
+                ++it;
+                continue;
+            }
+
+            OrderEvent exit_order = *it;
+            exit_order.ts = exec_ts;
+            exit_order.price = stop;
+            exit_order.strategy_id = strat.get_id();
+            exit_order.id = id_gen.next();
+            exit_order.reason = "stop loss";
+
+            if (it->signal == SIGNAL::LONG) {
+                exit_order.signal = SIGNAL::SELL;
+                fill_sell(exit_order, stop, cash, opos);
+            }
+            else {
+                exit_order.signal = SIGNAL::COVER;
+                fill_buy(exit_order, stop, cash, opos);
+            }
+
+            hlog.emplace_back(exit_order);
+            it = oposlog.erase(it);
         }
     }
 

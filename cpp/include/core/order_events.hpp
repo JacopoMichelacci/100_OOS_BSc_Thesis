@@ -48,6 +48,18 @@ enum class ORDER_TYPE : std::int8_t {
 };
 std::ostream& operator<<(std::ostream& os, ORDER_TYPE type);
 
+enum class STOP_TYPE : std::int8_t {
+    NONE = 0,
+    HARD = 1,
+};
+std::ostream& operator<<(std::ostream& os, STOP_TYPE type);
+
+struct StopLoss {
+    STOP_TYPE type = STOP_TYPE::NONE;
+    double slnot = -1.0;
+    double slpct = -1.0;
+};
+
 class OrderIdGenerator {
 public:
     long long next() {
@@ -84,6 +96,7 @@ public:
     std::string symbol = "";
     double qty = 0.0;
     double price = 0.0;
+    StopLoss sl = {};
     long long strategy_id = -1;                 // a unique identifier for a strategy; unique int given at construction 
     long long id = -1;                          // id of the order event
     ORDER_STATUS status = ORDER_STATUS::PENDING;
