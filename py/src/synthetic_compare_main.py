@@ -17,20 +17,24 @@ def main() -> None:
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
 
     metadata = read_metadata()
-    plot_path = plot_price_paths()
+    plot_paths = plot_price_paths()
 
-    write_markdown_report(metadata, plot_path)
+    write_markdown_report(metadata, plot_paths)
     write_pdf_report()
     cleanup_markdown_report()
 
     runtime_ms = (perf_counter() - start) * 1000
+    for path in plot_paths:
+        print(f"saved figure: {path}")
     print(f"\nsynthetic comparison report runtime: {runtime_ms:.0f}ms")
 
 
 REPORT_DIR = Path("output/synthetic_compare")
 ASSETS_DIR = REPORT_DIR / "_assets"
+FIGURES_DIR = Path("thesis/figures")
 REAL_PATH = ASSETS_DIR / "real_path.csv"
 METADATA_PATH = ASSETS_DIR / "metadata.csv"
 REPORT_MD_PATH = REPORT_DIR / "synthetic_compare_report.md"
@@ -38,9 +42,9 @@ REPORT_PDF_PATH = REPORT_DIR / "synthetic_compare_report.pdf"
 REPORT_CSS_PATH = Path("py/src/report/report_style.css")
 
 SYNTH_FILES = [
-    ("GBM", ASSETS_DIR / "synthetic_paths_gbm.csv"),
-    ("GBM Rolling Vol", ASSETS_DIR / "synthetic_paths_gbm_rolling_vol.csv"),
-    ("GBM Rolling Vol Threshold", ASSETS_DIR / "synthetic_paths_gbm_rolling_vol_threshold.csv"),
+    ("GBM", "synthetic_gbm", ASSETS_DIR / "synthetic_paths_gbm.csv"),
+    ("GBM Rolling Vol", "synthetic_gbm_rolling_vol", ASSETS_DIR / "synthetic_paths_gbm_rolling_vol.csv"),
+    ("GBM Rolling Vol Threshold", "synthetic_gbm_rolling_vol_threshold", ASSETS_DIR / "synthetic_paths_gbm_rolling_vol_threshold.csv"),
 ]
 
 
@@ -62,19 +66,21 @@ def ts_to_dt(values: list[int]) -> list[datetime]:
     return [datetime.fromtimestamp(value / 1000.0) for value in values]
 
 
-def plot_price_paths() -> Path:
-    out_path = ASSETS_DIR / "synthetic_price_paths.png"
-
+def plot_price_paths() -> list[Path]:
     real = pl.read_csv(REAL_PATH)
     real_x = ts_to_dt(real["ts"].to_list())
     real_close = real["close"].to_list()
 
-    fig, axes = plt.subplots(len(SYNTH_FILES), 1, figsize=(20, 30), sharex=True)
+    out_paths = []
 
-    for ax, (title, synth_path) in zip(axes, SYNTH_FILES):
+    for title, file_stem, synth_path in SYNTH_FILES:
         synth = pl.read_csv(synth_path)
+        out_path = ASSETS_DIR / f"{file_stem}.png"
+        thesis_path = FIGURES_DIR / f"{file_stem}.png"
 
-        for path_id in synth["path_id"].unique().sort().to_list():
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        for idx, path_id in enumerate(synth["path_id"].unique().sort().to_list()):
             path = synth.filter(pl.col("path_id") == path_id)
             ax.plot(
                 ts_to_dt(path["ts"].to_list()),
@@ -82,6 +88,7 @@ def plot_price_paths() -> Path:
                 color="gray",
                 alpha=0.22,
                 lw=0.6,
+                label="Synthetic paths" if idx == 0 else None,
             )
 
         ax.plot(
@@ -90,7 +97,7 @@ def plot_price_paths() -> Path:
             color="red",
             alpha=0.8,
             linewidth=0.8,
-            label="Real",
+            label="Real market path",
         )
 
         ax.set_title(title)
@@ -98,15 +105,18 @@ def plot_price_paths() -> Path:
         ax.grid(True, alpha=0.3)
         ax.legend()
 
-    fig.autofmt_xdate()
-    fig.tight_layout()
-    fig.savefig(out_path, dpi=150)
-    plt.close(fig)
+        fig.autofmt_xdate()
+        fig.tight_layout()
+        fig.savefig(out_path, dpi=200)
+        fig.savefig(thesis_path, dpi=200)
+        plt.close(fig)
 
-    return out_path
+        out_paths.append(out_path)
+
+    return out_paths
 
 
-def write_markdown_report(metadata: dict[str, str], plot_path: Path) -> None:
+def write_markdown_report(metadata: dict[str, str], plot_paths: list[Path]) -> None:
     lines = [
         "# Synthetic Market Comparison",
         "",
@@ -118,8 +128,13 @@ def write_markdown_report(metadata: dict[str, str], plot_path: Path) -> None:
             f"Seed: {metadata.get('seed', '')}"
         ),
         "",
-        f"![](_assets/{plot_path.name})",
     ]
+
+    for plot_path in plot_paths:
+        lines.extend([
+            f"![](_assets/{plot_path.name})",
+            "",
+        ])
 
     REPORT_MD_PATH.write_text("\n".join(lines), encoding="utf-8")
 
