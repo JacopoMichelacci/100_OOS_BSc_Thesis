@@ -19,6 +19,8 @@ struct Std_MrevConfig {
     double lower_std_thresh = -1.5;
     double upper_std_thresh = 1.5;
 
+    double slnot = -1.0;
+    double slpct = -1.0;
 
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE;
     double qty = 1.0;
@@ -87,7 +89,8 @@ public:
                 const double target_qty = calculate_qty(ctx, value);
                 const double buy_qty = ctx.opos < 0.0 ? target_qty - ctx.opos : target_qty;
                 if (buy_qty > 0.0) {
-                    out.push_back({.signal = SIGNAL::BBUY, .qty = buy_qty, .type = ORDER_TYPE::MARKET});
+                    out.push_back({.signal = SIGNAL::BBUY, .type = ORDER_TYPE::MARKET, .qty = buy_qty,
+                        .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
                 }
             }
         }
@@ -101,7 +104,8 @@ public:
                 const double target_qty = calculate_qty(ctx, value);
                 const double sell_qty = ctx.opos > 0.0 ? target_qty + ctx.opos : target_qty;
                 if (sell_qty > 0.0) {
-                    out.push_back({.signal = SIGNAL::BSELL, .qty = sell_qty, .type = ORDER_TYPE::MARKET});
+                    out.push_back({.signal = SIGNAL::BSELL, .type = ORDER_TYPE::MARKET, .qty = sell_qty,
+                        .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
                 }
             }
         }

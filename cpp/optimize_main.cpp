@@ -15,7 +15,7 @@
 #include "utils/data_window.hpp"
 #include "utils/timer.hpp"
 #include "core/market_events.hpp"
-#include "strategies/built_in/std_mrev.hpp"
+#include "strategies/built_in/ma_cross.hpp"
 #include "backtest/backtest.hpp"
 
 
@@ -210,9 +210,10 @@ int main() {
         .currency = "USD"
     };
 
-    const int std_len = 90;
-    const std::vector<double> thresholds = arange(0.5, 10.0, 0.1);
-    const int iterations = static_cast<int>(thresholds.size());
+    const int fast_len = 10;
+    const int slow_len = 30;
+    const std::vector<double> slpcts = arange(0.0, 30.0, 0.1);
+    const int iterations = static_cast<int>(slpcts.size());
 
     const std::string out_dir = "output/optimization/_assets";
     std::filesystem::create_directories(out_dir);
@@ -223,26 +224,26 @@ int main() {
         return 1;
     }
 
-    out << "threshold,net_profit,avg_trade,sharpe,max_dd,n_trades,n_trades_per_year\n";
+    out << "slpct,net_profit,avg_trade,sharpe,max_dd,n_trades,n_trades_per_year\n";
 
     double best_sharpe = -std::numeric_limits<double>::infinity();
-    double best_threshold = 0.0;
+    double best_slpct = 0.0;
 
-    for (double threshold : thresholds) {
-        Std_MRev<OHLCVEvent> strat("std_mrev_opt", Std_MrevConfig<OHLCVEvent>{
-            .std_len = std_len,
-            .lower_std_thresh = -threshold,
-            .upper_std_thresh = threshold,
+    for (double slpct : slpcts) {
+        MAC<OHLCVEvent> strat("mac_opt", MACConfig<OHLCVEvent>{
+            .fast_len = fast_len,
+            .slow_len = slow_len,
+            .slpct = slpct / 100.0,
             .pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE,
             .qty = 1.0,
-            .equity_pct = 0.01
+            .equity_pct = 0.05
         });
 
         Backtester<OHLCVEvent> bt(bt_config);
         const auto results = bt.run(strat, data);
         const auto metrics = calc_metrics(results, bt_config.initial_capital);
 
-        out << threshold << ","
+        out << slpct << ","
             << metrics.net_profit << ","
             << metrics.avg_trade << ","
             << metrics.sharpe << ","
@@ -252,23 +253,24 @@ int main() {
 
         if (metrics.sharpe > best_sharpe) {
             best_sharpe = metrics.sharpe;
-            best_threshold = threshold;
+            best_slpct = slpct;
         }
     }
 
     std::ofstream metadata(out_dir + "/metadata.csv");
     metadata << "key,value\n";
-    metadata << "strategy,Std_MRev\n";
+    metadata << "strategy,MAC\n";
     metadata << "data," << std::filesystem::path(data_path).stem().string() << "\n";
     metadata << "start_date," << start_date << "\n";
     metadata << "end_date," << end_date << "\n";
     metadata << "is_start_date," << first_date(data) << "\n";
     metadata << "is_end_date," << last_date(data) << "\n";
     metadata << "is_split_pct," << is_split_pct << "\n";
-    metadata << "optimized_param,threshold\n";
-    metadata << "fixed_std_len," << std_len << "\n";
+    metadata << "optimized_param,slpct\n";
+    metadata << "fast_len," << fast_len << "\n";
+    metadata << "slow_len," << slow_len << "\n";
     metadata << "objective,sharpe\n";
-    metadata << "best_threshold," << best_threshold << "\n";
+    metadata << "best_slpct," << best_slpct << "\n";
     metadata << "best_sharpe," << best_sharpe << "\n";
 
     const auto opt_end = std::chrono::steady_clock::now();
@@ -278,8 +280,9 @@ int main() {
     const double avg_runtime_ms = iterations ? opt_runtime_ms / iterations : 0.0;
 
     std::cout << "\noptimization complete"
-              << ", std_len: " << std_len
-              << ", best threshold: " << best_threshold
+              << ", fast_len: " << fast_len
+              << ", slow_len: " << slow_len
+              << ", best slpct: " << best_slpct
               << ", best sharpe: " << best_sharpe << "\n\n";
 
     std::cout << std::fixed << std::setprecision(2);

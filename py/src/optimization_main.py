@@ -100,8 +100,9 @@ def plot_metric_lines(results: pl.DataFrame, optimized_param: str) -> Path:
 
 def write_markdown_report(metadata: dict[str, str], plot_path: Path) -> None:
     optimized_param = metadata.get("optimized_param", "")
-    fixed_std_len = metadata.get("fixed_std_len", "")
-    best_threshold = metadata.get("best_threshold", "")
+    fast_len = metadata.get("fast_len", "")
+    slow_len = metadata.get("slow_len", "")
+    best_param = metadata.get(f"best_{optimized_param}", "")
     best_sharpe = metadata.get("best_sharpe", "")
 
     lines = [
@@ -115,9 +116,10 @@ def write_markdown_report(metadata: dict[str, str], plot_path: Path) -> None:
         f"| IS end date | {metadata.get('is_end_date', '')} |",
         f"| IS split | {metadata.get('is_split_pct', '')} |",
         f"| Optimized parameter | {optimized_param} |",
-        f"| Fixed std_len | {fixed_std_len} |",
+        f"| Fast length | {fast_len} |",
+        f"| Slow length | {slow_len} |",
         f"| Objective | {metadata.get('objective', '')} |",
-        f"| Best threshold | {best_threshold} |",
+        f"| Best {optimized_param} | {best_param} |",
         f"| Sharpe | {best_sharpe} |",
         "",
         "## Metric Line Plot",
