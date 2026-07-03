@@ -10,7 +10,7 @@ All strategies follow the same execution interface. At each bar, the strategy re
 
 Strategies can be configured to allow or disable long trades, short trades, and stacking. Stacking means that a strategy is allowed to add to an existing position in the same direction. If stacking is disabled, the strategy cannot increase an already open position on the same side.
 
-In the experiments, a fixed position size is used. This keeps the comparison focused on the optimization procedure and the trading rule, rather than on the effects of dynamic position sizing or compounding. The framework also supports fixed-fractional sizing, but this is not the main sizing method used for the thesis results.
+In the experiments, a fixed position size is used. This keeps the comparison focused on the optimization procedure and the trading rule, rather than on the effects of dynamic position sizing or compounding. Altough it could be argued that a fixed fractional positon sizing could highlight more realistically the effects of the 2 optimizations. As mentioned the framework also supports dynamic sizing based on current equity values, but this is not the sizing method used for the thesis optimization or results.
 
 Both strategies can attach a hard stop loss to newly opened positions. The stop can be defined either as a percentage move from the entry price or as a fixed notional price distance. Stop-loss execution is handled by the backtester at the open-lot level.
 
@@ -34,9 +34,8 @@ MA_f(t) \leq MA_s(t)
 MA_f(t-1) > MA_s(t-1).
 \]
 
-When the strategy is already positioned in the opposite direction, the generated order first closes the existing exposure and then opens the target position in the new direction. When stacking is enabled, repeated signals in the same direction can add new independent lots.
 
-The main parameters of this strategy are the fast moving-average length, the slow moving-average length, and the stop-loss value. The fast length must be smaller than the slow length.
+The main parameters of this strategy are the fast moving-average length, the slow moving-average length, and the stop-loss value.
 
 \section{Standard-deviation mean-reversion strategy}
 
@@ -54,7 +53,7 @@ It then computes a rolling standard deviation of recent price moves. The latest 
 Z_t = \frac{\Delta P_t}{\sigma_t}.
 \]
 
-where \(\sigma_t\) is the rolling standard deviation of recent price moves.
+where \(\sigma_t\) is the rolling standard deviation of x recent price moves.
 
 A long signal is generated when the standardized move is below a lower threshold:
 

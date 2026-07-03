@@ -1,2 +1,157 @@
-This chapter presents the synthetic market generation methods used to evaluate strategy robustness under alternative market paths.
+\section{Purpose of synthetic markets}
 
+The central problem of this thesis is not only whether a strategy performs well on one historical
+sample, but whether the chosen parameters are robust. A single historical price series gives only one
+realised path of the market. If the optimization is based only on that path, the selected parameters may
+fit details that are specific to that sample and may not repeat in the future.
+
+Synthetic markets are used to create alternative price paths that preserve some basic statistical
+properties of the original data, while still producing different possible market evolutions.
+
+In the thesis workflow, synthetic paths are generated from the historical IS data. The strategy is then
+optimized across those paths, using average performance across simulations instead of performance on
+one single historical IS sample. The final comparison is still made on the real OOS period, so the
+synthetic data is used only during the optimization phase.
+
+\section{General structure}
+
+Each synthetic path keeps the same timestamps and number of observations as the original data. The
+generator copies the structure of the original OHLCV series and then replaces the price values with
+simulated prices. Volume was not modeled nor considered in the synthetic generation as the strategies
+chosen operate without it.
+
+All methods start from the first observed close price. For each following bar, the previous synthetic
+close is used as the next synthetic open. A synthetic close is then generated, and the high and low are
+constructed around the synthetic open and close. This keeps the generated series in a standard OHLCV
+format.
+
+The generator currently implements three methods:
+
+\begin{itemize}
+    \item a basic geometric Brownian motion baseline;
+    \item a rolling-volatility geometric Brownian motion;
+    \item a rolling-volatility geometric Brownian motion with threshold constraints.
+\end{itemize}
+
+\section{Geometric Brownian motion baseline}
+
+The first method is a basic geometric Brownian motion (GBM). It is included as a simple benchmark
+because it is easy to interpret and widely used as a first approximation for price simulation.
+
+In continuous time, GBM is usually written as:
+
+\[
+dP_t = \mu P_t dt + \sigma P_t dW_t,
+\]
+
+where \(P_t\) is the price, \(\mu\) is the drift, \(\sigma\) is the volatility, and \(dW_t\) is
+the Brownian motion shock. The exact discrete-time solution over one time step is:
+
+\[
+P_t = P_{t-1}
+\exp\left((\mu - 0.5\sigma^2)\Delta t + \sigma \sqrt{\Delta t} z_t\right),
+\qquad z_t \sim N(0,1).
+\]
+
+In the implementation, one time step corresponds to one bar of the input data, so \(\Delta t = 1\).
+
+The method first computes historical close-to-close log returns:
+
+\[
+r_t = \log\left(\frac{P_t}{P_{t-1}}\right).
+\]
+
+The mean and standard deviation of these returns are used as the per-bar drift and volatility estimates.
+The next synthetic close is therefore generated as:
+
+\[
+P_t^{syn} = P_{t-1}^{syn} \exp\left((\mu - 0.5\sigma^2) + \sigma z_t\right),
+\]
+
+where \(z_t\) is drawn from a standard normal distribution. The time step is one bar, so there is no
+explicit \(dt\) term in the implementation. The estimates are already expressed in the frequency of the
+input data.
+
+This baseline is intentionally simple. Its main limitation is that it uses one global volatility estimate
+for the whole sample. Real markets usually show periods of higher and lower volatility, so a constant
+volatility model can produce paths that are too smooth in turbulent periods and too volatile in calm
+periods.
+
+\section{Rolling-volatility GBM}
+
+The second method keeps the same GBM structure but replaces the global volatility estimate with a
+rolling one. Instead of using one standard deviation for the entire sample, the volatility used at each bar
+is estimated from the most recent returns in a rolling window.
+
+The synthetic close is still generated from:
+
+\[
+P_t^{syn} = P_{t-1}^{syn} \exp\left((\mu - 0.5\sigma_t^2) + \sigma_t z_t\right),
+\]
+
+but \(\sigma_t\) now changes over time. This makes the synthetic paths closer to the structure of the
+original market, because volatility clusters are partly preserved. If the original IS data contains a
+volatile region, the generated paths around that region also tend to have larger moves.
+
+The drift \(\mu\) is kept as a global per-bar estimate. This keeps the method simple and avoids adding too
+many degrees of freedom. The main feature of this generator is the changing volatility, not a changing
+expected return.
+
+\section{Threshold-constrained rolling-volatility GBM}
+
+The third method adds a constraint to the rolling-volatility generator. At each bar, the generator builds
+a local price band around the original historical price level. The width of the band is based on the
+rolling volatility estimate:
+
+\[
+P_{t-1}^{orig} \exp(-k\sigma_t)
+\leq
+P_t^{syn}
+\leq
+P_{t-1}^{orig} \exp(k\sigma_t),
+\]
+
+where \(k\) is the threshold multiplier.
+
+If a sampled synthetic close falls outside this band, the value is rejected and sampled again. If the
+generator cannot find an accepted value after a fixed number of attempts, the value is clipped to the
+nearest boundary. This prevents extreme synthetic paths from drifting too far away from the original
+series while still allowing random variation around it.
+
+This method is useful for robustness testing because it creates alternative paths that remain locally
+anchored to the original market regime. It is less free than the pure GBM generators, but it can produce
+synthetic data that is easier to compare with the historical IS sample.
+
+\section{Synthetic high and low construction}
+
+The strategy backtester works with OHLCV bars, not only close prices. For this reason, the generator also
+creates synthetic highs and lows. The method estimates the historical size of the upper and lower bar
+extensions. For each bar, the upper extension is measured relative to the larger of the open and close,
+while the lower extension is measured relative to the smaller of the open and close.
+
+For the basic GBM, the generator uses global mean and standard deviation estimates for these extensions.
+For the rolling-volatility methods, the generator uses rolling estimates. This makes the intrabar range
+larger during high-volatility regions and smaller during low-volatility regions.
+
+The generated high is always placed above the larger of the synthetic open and close, and the generated
+low is always placed below the smaller of the synthetic open and close. This keeps every generated bar
+internally consistent:
+
+\[
+\text{High}_t \geq \max(\text{Open}_t, \text{Close}_t),
+\qquad
+\text{Low}_t \leq \min(\text{Open}_t, \text{Close}_t).
+\]
+
+\section{Role in the thesis experiment}
+
+The synthetic generators are not used to replace the real OOS test. They are used to create a different
+optimization input. The benchmark approach optimizes the strategy directly on the historical IS data. The
+alternative approach optimizes the same strategy over several synthetic paths generated from the IS data
+and evaluates parameters using average results across those paths.
+
+This makes the comparison simple: the optimization data changes, but the final OOS test remains the
+same. If the synthetic-market approach selects parameters that perform better or more stably on the real
+OOS period, this provides evidence that synthetic-path optimization can reduce dependence on one
+specific historical IS path. If it does not, the result is still useful because it shows the limits of the
+synthetic method under the assumptions used here.

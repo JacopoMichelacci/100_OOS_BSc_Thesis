@@ -69,7 +69,7 @@ def plot_price_paths() -> Path:
     real_x = ts_to_dt(real["ts"].to_list())
     real_close = real["close"].to_list()
 
-    fig, axes = plt.subplots(len(SYNTH_FILES), 1, figsize=(10, 11), sharex=True)
+    fig, axes = plt.subplots(len(SYNTH_FILES), 1, figsize=(20, 30), sharex=True)
 
     for ax, (title, synth_path) in zip(axes, SYNTH_FILES):
         synth = pl.read_csv(synth_path)
