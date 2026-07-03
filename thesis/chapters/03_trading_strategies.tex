@@ -1,24 +1,45 @@
 \section{Overview}
 
-The empirical part of the thesis uses rule-based trading strategies. The goal is not to prove the profitability of a trading strategy, but to compare how different optimization procedures affect the same strategy when tested OOS. For this reason, the strategies are intentionally simple and interpretable.
+The empirical part of the thesis uses rule-based trading strategies. The goal is not to prove the
+profitability of a trading strategy, but to compare how different optimization procedures affect the
+same strategy when tested OOS. For this reason, the strategies are intentionally simple and
+interpretable.
 
-Two strategy families are implemented in the framework: a moving-average crossover strategy and a standard-deviation mean-reversion strategy. They represent two common types of systematic trading logic. The first is trend-following, while the second is mean reverting.
+Two strategy families are implemented in the framework: a moving-average crossover strategy and a
+standard-deviation mean-reversion strategy. They represent two common types of systematic trading
+logic. The first is trend-following, while the second is mean reverting.
 
 \section{Common strategy structure}
 
-All strategies follow the same execution interface. At each bar, the strategy receives the current market observation and the current portfolio context. It can then produce one or more order events. The backtester is responsible for executing those orders according to the execution rules described in the methodology chapter.
+All strategies follow the same execution interface. At each bar, the strategy receives the current
+market observation and the current portfolio context. It can then produce one or more order events.
+The backtester is responsible for executing those orders according to the execution rules described
+in the methodology chapter.
 
-Strategies can be configured to allow or disable long trades, short trades, and stacking. Stacking means that a strategy is allowed to add to an existing position in the same direction. If stacking is disabled, the strategy cannot increase an already open position on the same side.
+Strategies can be configured to allow or disable long trades, short trades, and stacking. Stacking
+means that a strategy is allowed to add to an existing position in the same direction. If stacking
+is disabled, the strategy cannot increase an already open position on the same side.
 
-In the experiments, a fixed position size is used. This keeps the comparison focused on the optimization procedure and the trading rule, rather than on the effects of dynamic position sizing or compounding. Altough it could be argued that a fixed fractional positon sizing could highlight more realistically the effects of the 2 optimizations. As mentioned the framework also supports dynamic sizing based on current equity values, but this is not the sizing method used for the thesis optimization or results.
+In the experiments, a fixed position size is used. This keeps the comparison focused on the
+optimization procedure and the trading rule, rather than on the effects of dynamic position sizing
+or compounding. Altough it could be argued that a fixed fractional positon sizing could highlight
+more realistically the effects of the 2 optimizations. As mentioned the framework also supports
+dynamic sizing based on current equity values, but this is not the sizing method used for the thesis
+optimization or results.
 
-Both strategies can attach a hard stop loss to newly opened positions. The stop can be defined either as a percentage move from the entry price or as a fixed notional price distance. Stop-loss execution is handled by the backtester at the open-lot level.
+Both strategies can attach a hard stop loss to newly opened positions. The stop can be defined
+either as a percentage move from the entry price or as a fixed notional price distance. Stop-loss
+execution is handled by the backtester at the open-lot level.
 
 \section{Moving-average crossover strategy}
 
-The moving-average crossover strategy is a trend-following rule. It compares a fast moving average with a slow moving average. The fast average reacts more quickly to recent price changes, while the slow average represents a smoother estimate of the price trend.
+The moving-average crossover strategy is a trend-following rule. It compares a fast moving average
+with a slow moving average. The fast average reacts more quickly to recent price changes, while the
+slow average represents a smoother estimate of the price trend.
 
-Let \(MA_f(t)\) be the fast moving average at time \(t\), and \(MA_s(t)\) be the slow moving average. A long signal is generated when the fast moving average crosses above the slow moving average:
+Let \(MA_f(t)\) be the fast moving average at time \(t\), and \(MA_s(t)\) be the slow moving
+average. A long signal is generated when the fast moving average crosses above the slow moving
+average:
 
 \[
 MA_f(t) \geq MA_s(t)
@@ -34,12 +55,14 @@ MA_f(t) \leq MA_s(t)
 MA_f(t-1) > MA_s(t-1).
 \]
 
-
-The main parameters of this strategy are the fast moving-average length, the slow moving-average length, and the stop-loss value.
+The main parameters of this strategy are the fast moving-average length, the slow moving-average
+length, and the stop-loss value.
 
 \section{Standard-deviation mean-reversion strategy}
 
-The standard-deviation mean-reversion strategy is a contrarian rule. Instead of following the direction of recent movement, it looks for unusually large one-bar moves and assumes that part of the move may revert.
+The standard-deviation mean-reversion strategy is a contrarian rule. Instead of following the
+direction of recent movement, it looks for unusually large one-bar moves and assumes that part of
+the move may revert.
 
 At each bar, the strategy computes the last price move:
 
@@ -47,7 +70,8 @@ At each bar, the strategy computes the last price move:
 \Delta P_t = P_t - P_{t-1}.
 \]
 
-It then computes a rolling standard deviation of recent price moves. The latest move is standardized by dividing it by this rolling standard deviation:
+It then computes a rolling standard deviation of recent price moves. The latest move is standardized
+by dividing it by this rolling standard deviation:
 
 \[
 Z_t = \frac{\Delta P_t}{\sigma_t}.
@@ -67,10 +91,15 @@ A short signal is generated when the standardized move is above an upper thresho
 Z_t \geq \theta_U.
 \]
 
-The intuition is that a large negative move may be followed by a rebound, while a large positive move may be followed by a pullback. The main parameters of this strategy are the standard-deviation lookback length, the lower threshold, the upper threshold, and the stop-loss value.
+The intuition is that a large negative move may be followed by a rebound, while a large positive
+move may be followed by a pullback. The main parameters of this strategy are the standard-deviation
+lookback length, the lower threshold, the upper threshold, and the stop-loss value.
 
 \section{Role in the thesis}
 
-The two strategies are used as test cases for the optimization methodology. They are deliberately simple enough to make their behaviour understandable, but different enough to test the optimization procedure on both trend-following and mean-reversion logic.
+The two strategies are used as test cases for the optimization methodology. They are deliberately
+simple enough to make their behaviour understandable, but different enough to test the optimization
+procedure on both trend-following and mean-reversion logic.
 
-The exact parameter grids and selected parameter values are discussed in the optimization and results chapters.
+The exact parameter grids and selected parameter values are discussed in the optimization and
+results chapters.

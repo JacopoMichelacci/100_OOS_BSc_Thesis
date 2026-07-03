@@ -1,25 +1,73 @@
 \section{Motivation}
 
-Systematic trading strategies are rules that transform market data into trading decisions. Their appeal is straightforward: if a set of rules can identify repeatable market patterns, or possible market inefficiencies, it may be used to improve returns, control risk, and reduce dependence on discretionary judgement. Most strategies contain parameters, such as lookback windows, thresholds, or position-sizing rules. The process of choosing these parameters is known as strategy optimization, and it is a central part of algorithmic trading research. When performed carefully, optimization can help identify more effective configurations; when performed naively, it can lead to misleading results and poor live performance.
+Systematic trading strategies are rules that transform market data into trading decisions. Their
+appeal is straightforward: if a set of rules can identify repeatable market patterns, or possible
+market inefficiencies, it may be used to improve returns, control risk, and reduce dependence on
+discretionary judgement. Most strategies contain parameters, such as lookback windows, thresholds,
+or position-sizing rules. The process of choosing these parameters is known as strategy
+optimization, and it is a central part of algorithmic trading research. When performed carefully,
+optimization can help identify more effective configurations; when performed naively, it can lead to
+misleading results and poor live performance.
 
-The difficulty is that better historical performance does not automatically imply better future performance. In financial markets, the familiar warning that past returns are not indicative of future returns is not a legal formality only; it reflects a real statistical problem. A strategy can perform well in a backtest because it captures a genuine and persistent market effect, but it can also perform well simply because its parameters were fitted too closely to the specific historical sample being tested. This second case is the problem of overfitting, which is perhaps the most common and insidious challenge that one can tackle in strategy optimization.
+The difficulty is that better historical performance does not automatically imply better future
+performance. In financial markets, the familiar warning that past returns are not indicative of
+future returns is not a legal formality only; it reflects a real statistical problem. A strategy can
+perform well in a backtest because it captures a genuine and persistent market effect, but it can
+also perform well simply because its parameters were fitted too closely to the specific historical
+sample being tested. This second case is the problem of overfitting, which is perhaps the most
+common and insidious challenge that one can tackle in strategy optimization.
 
 \section{The overfitting problem}
 
-A naive approach to strategy development would be to optimize a strategy on the full available historical dataset and then deploy the best-performing configuration. This is problematic because the same data is used both to choose the parameters and to judge the quality of the strategy. If many parameter combinations are tested, some of them are likely to look good by chance, even if the underlying rule has little predictive value. The more parameter combinations and strategy variations are tested, the greater the probability of finding a configuration that performed well on the historical sample by chance rather than because of a robust underlying effect. Such a configuration may produce an impressive backtest, but fail when applied to new market data.
+A naive approach to strategy development would be to optimize a strategy on the full available
+historical dataset and then deploy the best-performing configuration. This is problematic because
+the same data is used both to choose the parameters and to judge the quality of the strategy. If
+many parameter combinations are tested, some of them are likely to look good by chance, even if the
+underlying rule has little predictive value. The more parameter combinations and strategy variations
+are tested, the greater the probability of finding a configuration that performed well on the
+historical sample by chance rather than because of a robust underlying effect. Such a configuration
+may produce an impressive backtest, but fail when applied to new market data.
 
-Overfitting can therefore be understood as a loss of generalization. The strategy becomes too adapted to the noise, anomalies, and specific sequence of events observed in the historical sample. As a consequence, the more a strategy is overfitted, the less likely it is that its backtested performance will be repeated in the future.
+Overfitting can therefore be understood as a loss of generalization. The strategy becomes too
+adapted to the noise, anomalies, and specific sequence of events observed in the historical sample.
+As a consequence, the more a strategy is overfitted, the less likely it is that its backtested
+performance will be repeated in the future.
 
-A common response to this issue is to split the historical data into two parts. The first part, usually called the in-sample period (IS from now on), is used to develop and optimize the strategy. The second part, called the out-of-sample period (OOS from now on), is kept separate and used only after the parameters have been selected. In this thesis, the benchmark approach uses a 70\% in-sample and 30\% out-of-sample split, where the out-of-sample period corresponds to the most recent part of the original historical series. This reflects the practical objective of testing whether a strategy optimized on the past would have remained effective on later unseen data.
+A common response to this issue is to split the historical data into two parts. The first part,
+usually called the in-sample period (IS from now on), is used to develop and optimize the strategy.
+The second part, called the out-of-sample period (OOS from now on), is kept separate and used only
+after the parameters have been selected. In this thesis, the benchmark approach uses a 70\%
+in-sample and 30\% out-of-sample split, where the out-of-sample period corresponds to the most
+recent part of the original historical series. This reflects the practical objective of testing
+whether a strategy optimized on the past would have remained effective on later unseen data.
 
 \section{Research question}
 
-The central question of this thesis is whether a synthetic-market-based optimization procedure can improve robustness compared with the standard historical in-sample optimization approach. Both methods use the same general optimization logic, but they differ in the data on which the optimization is performed.
+The central question of this thesis is whether a synthetic-market-based optimization procedure can
+improve robustness compared with the standard historical in-sample optimization approach. Both
+methods use the same general optimization logic, but they differ in the data on which the
+optimization is performed.
 
-In the benchmark case, the strategy is optimized directly on the historical in-sample period. In the synthetic case, the in-sample period is first used to generate multiple synthetic market paths. The strategy is then optimized across these generated paths, and parameter selection is based on average results rather than on one realized historical path. The selected parameters from both approaches are finally tested on the same real out-of-sample period. This makes the comparison focused: the objective is not to prove that a strategy is profitable, but to evaluate which optimization procedure appears less exposed to overfitting.
+In the benchmark case, the strategy is optimized directly on the historical in-sample period. In the
+synthetic case, the in-sample period is first used to generate multiple synthetic market paths. The
+strategy is then optimized across these generated paths, and parameter selection is based on average
+results rather than on one realized historical path. The selected parameters from both approaches
+are finally tested on the same real out-of-sample period. This makes the comparison focused: the
+objective is not to prove that a strategy is profitable, but to evaluate which optimization
+procedure loses less performance when moving from optimization to OOS testing.
 
 \section{Approach and contribution}
 
-The research question requires both a clear testing procedure and code that can run many strategy tests efficiently. For this reason, I developed a custom research framework composed of a C++ backtesting and optimization engine connected to Python reporting and analysis tools. The C++ component handles the computationally intensive parts of the workflow, including data processing, strategy simulation, trade reconstruction, and grid-based optimization. Python is used for report generation and plotting.
+The research question requires both a clear testing procedure and code that can run many strategy
+tests efficiently. For this reason, I developed a custom research framework composed of a C++
+backtesting and optimization engine connected to Python reporting and analysis tools. The C++
+component handles the computationally intensive parts of the workflow, including data processing,
+strategy simulation, trade reconstruction, and grid-based optimization. Python is used for report
+generation and plotting.
 
-The framework makes it possible to compare the two optimization approaches directly. In both cases, the same strategy, data split, performance metrics, and out-of-sample test period are used. The only difference is where the optimization results come from: in the benchmark case, they come from the historical in-sample data; in the alternative case, they come from multiple synthetic paths generated from that same in-sample data.
+The framework makes it possible to compare the two optimization approaches directly. In both cases,
+the same strategy, data split, performance metrics, and out-of-sample test period are used. The only
+difference is where the optimization results come from: in the benchmark case, they come from the
+historical in-sample data; in the alternative case, they come from multiple synthetic paths
+generated from that same in-sample data. The main comparison is therefore the IS-OOS performance gap
+produced by each method.
