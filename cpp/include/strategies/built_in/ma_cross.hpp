@@ -7,16 +7,16 @@
 
 #include "strategies/strategy_base.hpp"
 #include "core/order_events.hpp"
+#include "core/price_field.hpp"
 #include "indicators/built_in/moving_average.hpp"
-#include "utils/field_access.hpp"
 
 template <typename Tin>
 struct MACConfig {
     int16_t fast_len = 10;
-    double Tin::* fast_field = default_close_field<Tin>();
+    PRICE_FIELD fast_price_field = PRICE_FIELD::CLOSE;
 
     int16_t slow_len = 30;
-    double Tin::* slow_field = default_close_field<Tin>();
+    PRICE_FIELD slow_price_field = PRICE_FIELD::CLOSE;
 
     double slnot = -1.0;
     double slpct = -1.0;
@@ -41,9 +41,6 @@ public:
             throw std::invalid_argument("lengths must be positive. fast length must be < slow length");
         }
 
-        if (params.fast_field == nullptr || params.slow_field == nullptr) {
-            throw std::invalid_argument("MACConfig requires fast_field and slow_field when Tin has no double close field");
-        }
         if (params.equity_pct <= 0.0 || params.equity_pct > 1.0) {
             throw std::invalid_argument("MAC equity_pct must be in (0, 1]");
         }
@@ -56,9 +53,12 @@ public:
             return;
         }
 
+        const double fast_price = get_price_field(input, params.fast_price_field);
+        const double slow_price = get_price_field(input, params.slow_price_field);
+
         // update indicators
-        fast_sma.update_buffer(input.*params.fast_field);
-        slow_sma.update_buffer(input.*params.slow_field);
+        fast_sma.update_buffer(fast_price);
+        slow_sma.update_buffer(slow_price);
 
         // check we have data valid ma's
         if (!slow_sma[-1] || !slow_sma[-2]) {
@@ -71,7 +71,7 @@ public:
                 if (!this->bconfig.stacking && ctx.opos > 0.0) {
                     return;
                 }
-                const double target_qty = calculate_qty(ctx, input);
+                const double target_qty = calculate_qty(ctx, input.close);
                 const double buy_qty = ctx.opos < 0.0 ? target_qty - ctx.opos : target_qty;
                 out.push_back({.signal = SIGNAL::BBUY, .type = ORDER_TYPE::MARKET, .qty = buy_qty,
                     .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
@@ -85,7 +85,7 @@ public:
                 if (!this->bconfig.stacking && ctx.opos < 0.0) {
                     return;
                 }
-                const double target_qty = calculate_qty(ctx, input);
+                const double target_qty = calculate_qty(ctx, input.close);
                 const double sell_qty = ctx.opos > 0.0 ? target_qty + ctx.opos : target_qty;
                 out.push_back({.signal = SIGNAL::BSELL, .type = ORDER_TYPE::MARKET, .qty = sell_qty,
                     .sl = StopLoss{.type = STOP_TYPE::HARD, .slnot = params.slnot, .slpct = params.slpct}});
@@ -95,12 +95,12 @@ public:
         
     }
 
-    double calculate_qty(const StrategyContext& ctx, const Tin& input) const {
+    double calculate_qty(const StrategyContext& ctx, double price) const {
         switch (params.pos_sizing_mode) {
             case SIZING_MODE::FIXED:
                 return params.qty;
             case SIZING_MODE::FIXED_FRACTIONAL_PRICE:
-                return this->sizer.fixed_fractional_price(ctx.equity, input.*params.fast_field, params.equity_pct);
+                return this->sizer.fixed_fractional_price(ctx.equity, price, params.equity_pct);
             default:
                 throw std::invalid_argument("MAC unsupported sizing mode");
         }

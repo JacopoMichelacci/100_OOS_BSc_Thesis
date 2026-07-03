@@ -8,14 +8,14 @@
 
 #include "strategies/strategy_base.hpp"
 #include "core/order_events.hpp"
+#include "core/price_field.hpp"
 #include "indicators/built_in/standard_deviation.hpp"
-#include "utils/field_access.hpp"
 
 
 template <typename Tin>
 struct Std_MrevConfig {
     int std_len = 15;
-    double Tin::* field = default_close_field<Tin, double>();
+    PRICE_FIELD price_field = PRICE_FIELD::CLOSE;
     double lower_std_thresh = -1.5;
     double upper_std_thresh = 1.5;
 
@@ -48,9 +48,6 @@ public:
         if (params.equity_pct <= 0.0 || params.equity_pct > 1.0) {
             throw std::invalid_argument("Std_MRev equity_pct must be in (0, 1]");
         }
-        if (params.field == nullptr) {
-            throw std::invalid_argument("Std_MrevConfig requires field when Tin has no double close field");
-        }
     }
 
     virtual void on_data(const Tin& input, const StrategyContext& ctx, std::vector<OrderEvent>& out) override {
@@ -60,7 +57,7 @@ public:
             return;
         }
         
-        const double value = input.*params.field;
+        const double value = get_price_field(input, params.price_field);
         if (!prev_value) {
             prev_value = value;
             return;
