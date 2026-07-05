@@ -19,3 +19,6 @@ wheels/
 _data/
 data/_internal/
 output/
+
+
+.DS_store

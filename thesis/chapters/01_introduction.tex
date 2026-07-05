@@ -1,22 +1,3 @@
-\section{Motivation}
-
-Systematic trading strategies are rules that transform market data into trading decisions. Their
-appeal is straightforward: if a set of rules can identify repeatable market patterns, or possible
-market inefficiencies, it may be used to improve returns, control risk, and reduce dependence on
-discretionary judgement. Most strategies contain parameters, such as lookback windows, thresholds,
-or position-sizing rules. The process of choosing these parameters is known as strategy
-optimization, and it is a central part of algorithmic trading research. When performed carefully,
-optimization can help identify more effective configurations; when performed naively, it can lead to
-misleading results and poor live performance.
-
-The difficulty is that better historical performance does not automatically imply better future
-performance. In financial markets, the familiar warning that past returns are not indicative of
-future returns is not a legal formality only; it reflects a real statistical problem. A strategy can
-perform well in a backtest because it captures a genuine and persistent market effect, but it can
-also perform well simply because its parameters were fitted too closely to the specific historical
-sample being tested. This second case is the problem of overfitting, which is perhaps the most
-common and insidious challenge that one can tackle in strategy optimization.
-
 \section{The overfitting problem}
 
 A naive approach to strategy development would be to optimize a strategy on the full available
@@ -40,6 +21,24 @@ after the parameters have been selected. In this thesis, the benchmark approach 
 in-sample and 30\% out-of-sample split, where the out-of-sample period corresponds to the most
 recent part of the original historical series. This reflects the practical objective of testing
 whether a strategy optimized on the past would have remained effective on later unseen data.
+
+\section{Rationale}
+
+Given the overfitting problem discussed above, the standard practice is to separate optimization and
+evaluation through an IS/OOS split. The strategy is optimized on the IS period, the parameters are
+frozen, and the final evaluation is performed on the OOS period. This is useful because it creates a
+cleaner test of whether the optimized parameters generalize to unseen data.
+
+This thesis proposes an alternative optimization input. Instead of optimizing only on the single
+historical IS path, the IS period is used to generate several synthetic market paths. The strategy is
+then optimized using average performance across those paths. The purpose is to test whether this can
+reduce the loss of generalization created by overfitting.
+
+This idea is not usually the first approach in strategy optimization. A common objection is that
+synthetic random walks may add too much noise and remove too much of the original market structure.
+In that case, the optimizer would no longer learn from market behaviour, but from artificial
+randomness. This thesis addresses that concern by using synthetic paths that retain randomness while
+remaining linked to the original market path by construction.
 
 \section{Research question}
 
