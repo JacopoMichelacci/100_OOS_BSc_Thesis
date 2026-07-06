@@ -285,7 +285,7 @@ Typical things to change:
 
 - `data_path`;
 - `start_date` / `end_date`;
-- `oos_split_pct`;
+- `oos_test_pct`;
 - strategy parameters;
 - strategy type;
 - optimization grid;

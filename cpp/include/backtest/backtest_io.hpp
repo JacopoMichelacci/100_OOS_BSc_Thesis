@@ -19,7 +19,7 @@ inline void write_backtest_metadata(
     const std::string& out_dir = "output/backtest/_assets",
     const std::string& start_date = "",
     const std::string& end_date = "",
-    double oos_split_pct = 1.0,
+    double oos_test_pct = 1.0,
     const std::string& run_start_date = "",
     const std::string& run_end_date = ""
 ) {
@@ -42,7 +42,7 @@ inline void write_backtest_metadata(
     metadata_out << "cost_bps," << cost_bps << "\n";
     metadata_out << "start_date," << start_date << "\n";
     metadata_out << "end_date," << end_date << "\n";
-    metadata_out << "oos_split_pct," << oos_split_pct << "\n";
+    metadata_out << "oos_test_pct," << oos_test_pct << "\n";
     metadata_out << "run_start_date," << run_start_date << "\n";
     metadata_out << "run_end_date," << run_end_date << "\n";
 }

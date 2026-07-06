@@ -106,18 +106,17 @@ public:
         std::mt19937 rng(seed);
         std::normal_distribution<double> norm(0.0, 1.0);
 
-        // generate synthetic paths
+        // store synthetic paths
         std::vector<std::vector<Tin>> paths;
         paths.reserve(iter);
 
         for (int path_idx = 0; path_idx < iter; ++path_idx) {
             // copy timestamps / metadata, overwrite prices
             std::vector<Tin> path = data;
-            double prev_close = data[0].close;
-            path[0].open = prev_close;
-            path[0].high = prev_close;
-            path[0].low = prev_close;
-            path[0].close = prev_close;
+            path[0].open = data[0].open;
+            path[0].high = data[0].high;
+            path[0].low = data[0].low;
+            path[0].close = data[0].close;
 
             for (std::size_t i = 1; i < path.size(); ++i) {
                 // mu and sigma are per input bar, so dt is implicitly 1 bar
@@ -262,7 +261,7 @@ public:
         log_returns.reserve(data.size() - 1);
         high_exts.reserve(data.size() - 1);
         low_exts.reserve(data.size() - 1);
-
+        
         for (std::size_t i = 1; i < data.size(); ++i) {
             if (data[i - 1].close <= 0.0 || data[i].close <= 0.0) {
                 throw std::invalid_argument("gen_gbm_rolling_vol_threshold requires positive close prices");

@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <limits>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include "utils/timer.hpp"
 #include "core/market_events.hpp"
 #include "strategies/built_in/ma_cross.hpp"
+#include "strategies/built_in/std_mrev.hpp"
 #include "backtest/backtest.hpp"
 
 
@@ -50,6 +52,169 @@ std::vector<double> arange(double start, double stop, double step) {
         values.push_back(value);
     }
     return values;
+}
+
+
+enum class OPT_STRATEGY {
+    MAC,
+    STD_MREV
+};
+
+
+enum class OPT_PARAM {
+    MAC_FAST_LEN,
+    MAC_SLOW_LEN,
+    MAC_SLPCT,
+    STD_LEN,
+    STD_THRESH,
+    STD_SLPCT
+};
+
+
+struct ExperimentConfig {
+    // main experiment controls
+    OPT_STRATEGY strategy = OPT_STRATEGY::MAC;
+    OPT_PARAM optimized_param = OPT_PARAM::MAC_SLPCT;
+    std::vector<double> grid = arange(0.0, 30.0, 0.1);
+
+    // data controls
+    std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
+    std::string start_date = "";
+    std::string end_date = "";
+    double oos_test_pct = 0.30;
+
+    // backtest controls
+    double initial_capital = 100'000.0;
+    double cost_bps = 0.0;
+    std::string currency = "USD";
+
+    // MAC resting params
+    int mac_fast_len = 50;
+    int mac_slow_len = 100;
+    PRICE_FIELD mac_fast_price_field = PRICE_FIELD::CLOSE;
+    PRICE_FIELD mac_slow_price_field = PRICE_FIELD::CLOSE;
+    double mac_slpct = -1.0;
+    double mac_slnot = -1.0;
+
+    // Std_MRev resting params
+    int std_len = 15;
+    PRICE_FIELD std_price_field = PRICE_FIELD::CLOSE;
+    double std_lower_thresh = -1.5;
+    double std_upper_thresh = 1.5;
+    double std_slpct = -1.0;
+    double std_slnot = -1.0;
+};
+
+
+const char* strategy_name(OPT_STRATEGY strategy) {
+    switch (strategy) {
+        case OPT_STRATEGY::MAC:
+            return "MAC";
+        case OPT_STRATEGY::STD_MREV:
+            return "Std_MRev";
+        default:
+            return "UNKNOWN";
+    }
+}
+
+
+const char* param_name(OPT_PARAM param) {
+    switch (param) {
+        case OPT_PARAM::MAC_FAST_LEN:
+            return "fast_len";
+        case OPT_PARAM::MAC_SLOW_LEN:
+            return "slow_len";
+        case OPT_PARAM::MAC_SLPCT:
+            return "slpct";
+        case OPT_PARAM::STD_LEN:
+            return "std_len";
+        case OPT_PARAM::STD_THRESH:
+            return "threshold";
+        case OPT_PARAM::STD_SLPCT:
+            return "slpct";
+        default:
+            return "unknown_param";
+    }
+}
+
+
+BacktestResults run_one_backtest(
+    const ExperimentConfig& cfg,
+    double param_value,
+    const std::vector<OHLCVEvent>& data,
+    const BacktestConfig& bt_config
+) {
+    Backtester<OHLCVEvent> bt(bt_config);
+
+    if (cfg.strategy == OPT_STRATEGY::MAC) {
+        int fast_len = cfg.mac_fast_len;
+        int slow_len = cfg.mac_slow_len;
+        double slpct = cfg.mac_slpct;
+
+        switch (cfg.optimized_param) {
+            case OPT_PARAM::MAC_FAST_LEN:
+                fast_len = static_cast<int>(std::lround(param_value));
+                break;
+            case OPT_PARAM::MAC_SLOW_LEN:
+                slow_len = static_cast<int>(std::lround(param_value));
+                break;
+            case OPT_PARAM::MAC_SLPCT:
+                slpct = param_value / 100.0;
+                break;
+            default:
+                throw std::invalid_argument("selected optimized_param is not valid for MAC");
+        }
+
+        MAC<OHLCVEvent> strat("mac_opt", MACConfig<OHLCVEvent>{
+            .fast_len = static_cast<int16_t>(fast_len),
+            .fast_price_field = cfg.mac_fast_price_field,
+            .slow_len = static_cast<int16_t>(slow_len),
+            .slow_price_field = cfg.mac_slow_price_field,
+            .slnot = cfg.mac_slnot,
+            .slpct = slpct,
+            .pos_sizing_mode = SIZING_MODE::FIXED,
+            .qty = 1.0
+        });
+
+        return bt.run(strat, data);
+    }
+
+    if (cfg.strategy == OPT_STRATEGY::STD_MREV) {
+        int std_len = cfg.std_len;
+        double lower_thresh = cfg.std_lower_thresh;
+        double upper_thresh = cfg.std_upper_thresh;
+        double slpct = cfg.std_slpct;
+
+        switch (cfg.optimized_param) {
+            case OPT_PARAM::STD_LEN:
+                std_len = static_cast<int>(std::lround(param_value));
+                break;
+            case OPT_PARAM::STD_THRESH:
+                lower_thresh = -param_value;
+                upper_thresh = param_value;
+                break;
+            case OPT_PARAM::STD_SLPCT:
+                slpct = param_value / 100.0;
+                break;
+            default:
+                throw std::invalid_argument("selected optimized_param is not valid for Std_MRev");
+        }
+
+        Std_MRev<OHLCVEvent> strat("std_mrev_opt", Std_MrevConfig<OHLCVEvent>{
+            .std_len = std_len,
+            .price_field = cfg.std_price_field,
+            .lower_std_thresh = lower_thresh,
+            .upper_std_thresh = upper_thresh,
+            .slnot = cfg.std_slnot,
+            .slpct = slpct,
+            .pos_sizing_mode = SIZING_MODE::FIXED,
+            .qty = 1.0
+        });
+
+        return bt.run(strat, data);
+    }
+
+    throw std::invalid_argument("unknown optimization strategy");
 }
 
 
@@ -188,32 +353,56 @@ OptMetrics calc_metrics(const BacktestResults& results, double initial_capital, 
 
 
 int main() {
-    Timer timer(TIMER_TYPE::MILLISECONDS);
+    Timer timer(TIMER_TYPE::MICROSECONDS);
     timer.start();
-    const auto opt_start = std::chrono::steady_clock::now();
 
-    const std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
-    const std::string start_date = "";
-    const std::string end_date = "";
-    const double oos_split_pct = 0.25;
-    const double is_split_pct = 1.0 - oos_split_pct;
+    // Change this block for normal optimization experiments.
+    ExperimentConfig cfg{
+        .strategy = OPT_STRATEGY::MAC,
+        .optimized_param = OPT_PARAM::MAC_SLPCT,
+        .grid = arange(0.0, 30.0, 0.1),
 
-    auto all_data = load_csv<OHLCVEvent>(data_path);
-    const bool use_date_split = !start_date.empty() || !end_date.empty();
-    auto data = use_date_split
-        ? filter_by_date(all_data, start_date, end_date)
-        : split_by_pct(all_data, is_split_pct, DATA_SPLIT_SIDE::FIRST);
+        .data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv",
+        .start_date = "",
+        .end_date = "",
+        .oos_test_pct = 0.30,
 
-    BacktestConfig bt_config{
         .initial_capital = 100'000.0,
         .cost_bps = 0.0,
-        .currency = "USD"
+        .currency = "USD",
+
+        .mac_fast_len = 50,
+        .mac_slow_len = 100,
+        .mac_fast_price_field = PRICE_FIELD::CLOSE,
+        .mac_slow_price_field = PRICE_FIELD::CLOSE,
+        .mac_slpct = -1.0,
+        .mac_slnot = -1.0,
+
+        .std_len = 15,
+        .std_price_field = PRICE_FIELD::CLOSE,
+        .std_lower_thresh = -1.5,
+        .std_upper_thresh = 1.5,
+        .std_slpct = -1.0,
+        .std_slnot = -1.0
     };
 
-    const int fast_len = 10;
-    const int slow_len = 30;
-    const std::vector<double> slpcts = arange(0.0, 30.0, 0.1);
-    const int iterations = static_cast<int>(slpcts.size());
+    const double is_optimization_pct = 1.0 - cfg.oos_test_pct;
+
+    auto all_data = load_csv<OHLCVEvent>(cfg.data_path);
+    // if dates are chosen date split is overthrown
+    const bool use_date_split = !cfg.start_date.empty() || !cfg.end_date.empty();
+    auto data = use_date_split
+        ? filter_by_date(all_data, cfg.start_date, cfg.end_date)
+        : split_by_pct(all_data, is_optimization_pct, DATA_SPLIT_SIDE::FIRST);
+
+    BacktestConfig bt_config{
+        .initial_capital = cfg.initial_capital,
+        .cost_bps = cfg.cost_bps,
+        .currency = cfg.currency
+    };
+
+    const int iterations = static_cast<int>(cfg.grid.size());
+    const std::string optimized_param_name = param_name(cfg.optimized_param);
 
     const std::string out_dir = "output/optimization/_assets";
     std::filesystem::create_directories(out_dir);
@@ -224,26 +413,16 @@ int main() {
         return 1;
     }
 
-    out << "slpct,net_profit,avg_trade,sharpe,max_dd,n_trades,n_trades_per_year\n";
+    out << optimized_param_name << ",net_profit,avg_trade,sharpe,max_dd,n_trades,n_trades_per_year\n";
 
     double best_sharpe = -std::numeric_limits<double>::infinity();
-    double best_slpct = 0.0;
+    double best_value = 0.0;
 
-    for (double slpct : slpcts) {
-        MAC<OHLCVEvent> strat("mac_opt", MACConfig<OHLCVEvent>{
-            .fast_len = fast_len,
-            .slow_len = slow_len,
-            .slpct = slpct / 100.0,
-            .pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE,
-            .qty = 1.0,
-            .equity_pct = 0.05
-        });
-
-        Backtester<OHLCVEvent> bt(bt_config);
-        const auto results = bt.run(strat, data);
+    for (double param_value : cfg.grid) {
+        const auto results = run_one_backtest(cfg, param_value, data, bt_config);
         const auto metrics = calc_metrics(results, bt_config.initial_capital);
 
-        out << slpct << ","
+        out << param_value << ","
             << metrics.net_profit << ","
             << metrics.avg_trade << ","
             << metrics.sharpe << ","
@@ -253,44 +432,46 @@ int main() {
 
         if (metrics.sharpe > best_sharpe) {
             best_sharpe = metrics.sharpe;
-            best_slpct = slpct;
+            best_value = param_value;
         }
     }
 
     std::ofstream metadata(out_dir + "/metadata.csv");
     metadata << "key,value\n";
-    metadata << "strategy,MAC\n";
-    metadata << "data," << std::filesystem::path(data_path).stem().string() << "\n";
-    metadata << "start_date," << start_date << "\n";
-    metadata << "end_date," << end_date << "\n";
+    metadata << "strategy," << strategy_name(cfg.strategy) << "\n";
+    metadata << "data," << std::filesystem::path(cfg.data_path).stem().string() << "\n";
+    metadata << "start_date," << cfg.start_date << "\n";
+    metadata << "end_date," << cfg.end_date << "\n";
     metadata << "is_start_date," << first_date(data) << "\n";
     metadata << "is_end_date," << last_date(data) << "\n";
-    metadata << "is_split_pct," << is_split_pct << "\n";
-    metadata << "optimized_param,slpct\n";
-    metadata << "fast_len," << fast_len << "\n";
-    metadata << "slow_len," << slow_len << "\n";
+    metadata << "is_optimization_pct," << is_optimization_pct << "\n";
+    metadata << "oos_test_pct," << cfg.oos_test_pct << "\n";
+    metadata << "optimized_param," << optimized_param_name << "\n";
+    metadata << "mac_fast_len," << cfg.mac_fast_len << "\n";
+    metadata << "mac_slow_len," << cfg.mac_slow_len << "\n";
+    metadata << "mac_slpct," << cfg.mac_slpct << "\n";
+    metadata << "std_len," << cfg.std_len << "\n";
+    metadata << "std_lower_thresh," << cfg.std_lower_thresh << "\n";
+    metadata << "std_upper_thresh," << cfg.std_upper_thresh << "\n";
+    metadata << "std_slpct," << cfg.std_slpct << "\n";
     metadata << "objective,sharpe\n";
-    metadata << "best_slpct," << best_slpct << "\n";
+    metadata << "best_" << optimized_param_name << "," << best_value << "\n";
     metadata << "best_sharpe," << best_sharpe << "\n";
 
-    const auto opt_end = std::chrono::steady_clock::now();
-    const double opt_runtime_ms = static_cast<double>(
-        std::chrono::duration_cast<std::chrono::microseconds>(opt_end - opt_start).count()
-    ) / 1000.0;
-    const double avg_runtime_ms = iterations ? opt_runtime_ms / iterations : 0.0;
+    // timer
+    const double opt_runtime_ms = static_cast<double>(timer.end()) / 1000.0;
+    const double avg_runtime_ms = iterations != 0 ? opt_runtime_ms / iterations : 0.0;
 
     std::cout << "\noptimization complete"
-              << ", fast_len: " << fast_len
-              << ", slow_len: " << slow_len
-              << ", best slpct: " << best_slpct
+              << ", strategy: " << strategy_name(cfg.strategy)
+              << ", optimized param: " << optimized_param_name
+              << ", best value: " << best_value
               << ", best sharpe: " << best_sharpe << "\n\n";
 
     std::cout << std::fixed << std::setprecision(2);
     std::cout << "iterations: " << iterations << "\n";
     std::cout << "optimization runtime: " << opt_runtime_ms << "ms\n";
     std::cout << "avg runtime per run: " << avg_runtime_ms << "ms\n";
-
-    timer.end();
 
     return 0;
 }

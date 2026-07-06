@@ -1,0 +1,36 @@
+Shared settings:
+
+- long_active: true
+- short_active: true
+- active: true
+- pos_sizing_mode: FIXED
+- qty: 1 lot
+
+
+MA Cross
+--------
+Resting parameters before optimization:
+
+- fast_len: 50
+- slow_len: 100
+- fast_price_field: CLOSE
+- slow_price_field: CLOSE
+- slpct: -1
+
+AAPL optimization 2000-present:
+-   -   -   -   -   -   -   -
+bechmark:
+
+synthetic:
+
+
+Std MRev
+--------
+Resting parameters before optimization:
+
+- std_len: 15
+- price_field: CLOSE
+- lower_std_thresh: -1.5
+- upper_std_thresh: 1.5
+- slpct: -1
+

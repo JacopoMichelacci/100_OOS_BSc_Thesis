@@ -7,6 +7,7 @@ from typing import Literal
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import numpy as np
 import polars as pl
 
@@ -982,6 +983,7 @@ class Metrics:
             ax.set_title(title)
             ax.set_xlabel("Return (%)")
             ax.set_ylabel("Trade Count")
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
             ax.grid(True, alpha=0.25)
             fig.tight_layout()
             fig.savefig(out_path, dpi=150)

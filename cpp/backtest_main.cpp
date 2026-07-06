@@ -9,7 +9,7 @@
 #include "core/market_events.hpp"
 
 
-#include "strategies/built_in/std_mrev.hpp"
+#include "strategies/built_in/ma_cross.hpp"
 #include "backtest/backtest.hpp"
 #include "backtest/backtest_io.hpp"
 
@@ -22,20 +22,24 @@ int main() {
     const std::string data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv";
     const std::string start_date = "";
     const std::string end_date = "";
-    const double oos_split_pct = 0.25;
+    const double oos_test_pct = 0.30;
 
     auto all_data = load_csv<OHLCVEvent>(data_path);
     const bool use_date_split = !start_date.empty() || !end_date.empty();
     auto data = use_date_split
         ? filter_by_date(all_data, start_date, end_date)
-        : split_by_pct(all_data, oos_split_pct, DATA_SPLIT_SIDE::LAST);
+        : split_by_pct(all_data, oos_test_pct, DATA_SPLIT_SIDE::LAST);
 
     
     // 2. set up strategy
-    Std_MRev<OHLCVEvent> strat("std_mrev_demo", Std_MrevConfig<OHLCVEvent>{
-        .std_len = 15,
-        .lower_std_thresh = -2.5,
-        .upper_std_thresh = 2.5,
+    MAC<OHLCVEvent> strat("ma_cross_demo", MACConfig<OHLCVEvent>{
+        .fast_len = 50,
+        .fast_price_field = PRICE_FIELD::CLOSE,
+        .slow_len = 100,
+        .slow_price_field = PRICE_FIELD::CLOSE,
+        .slnot = -1.0,
+        .slpct = -1.0,
+        .pos_sizing_mode = SIZING_MODE::FIXED,
         .qty = 1.0
     });
 
@@ -61,7 +65,7 @@ int main() {
         "output/backtest/_assets",
         start_date,
         end_date,
-        oos_split_pct,
+        oos_test_pct,
         first_date(data),
         last_date(data)
     );
