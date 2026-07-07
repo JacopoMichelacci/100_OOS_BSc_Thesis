@@ -20,6 +20,7 @@ inline void write_backtest_metadata(
     const std::string& start_date = "",
     const std::string& end_date = "",
     double oos_test_pct = 1.0,
+    std::string_view sample = "",
     const std::string& run_start_date = "",
     const std::string& run_end_date = ""
 ) {
@@ -43,6 +44,7 @@ inline void write_backtest_metadata(
     metadata_out << "start_date," << start_date << "\n";
     metadata_out << "end_date," << end_date << "\n";
     metadata_out << "oos_test_pct," << oos_test_pct << "\n";
+    metadata_out << "sample," << sample << "\n";
     metadata_out << "run_start_date," << run_start_date << "\n";
     metadata_out << "run_end_date," << run_end_date << "\n";
 }

@@ -17,11 +17,36 @@ Resting parameters before optimization:
 - slow_price_field: CLOSE
 - slpct: -1
 
+
 AAPL optimization 2000-present:
 -   -   -   -   -   -   -   -
-bechmark:
+benchmark:
+- slpct: -1
+- fast_len: 50
+- slow_len: 200
+performance with the same parameters (proving gmb_rolling_thresh) is good path approximator and not pure randomness:
+standard thesis summary (Diff = OOS - IS)
+Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
+IS                 44.56         -0.01          0.66          1.76          0.76
+OOS                 6.07         -0.18          0.02         -6.00          1.01
+Diff              -38.49         -0.17         -0.64         -7.76          0.25
+
+
+synthetic thesis summary (Diff = OOS - IS)
+Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
+IS                 37.44         -0.01          0.53          1.55          0.87
+OOS                 6.07         -0.18          0.02         -6.00          1.01
+Diff              -31.37         -0.17         -0.52         -7.54          0.14
 
 synthetic:
+- slpct: -1
+- fast_len: 35
+- slow_len: 200
+synthetic thesis summary (Diff = OOS - IS)
+Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
+IS                 37.45         -0.01          0.53          1.34          0.99
+OOS               -20.49         -0.21         -0.06         -8.96          1.01
+Diff              -57.94         -0.20         -0.59        -10.30          0.02
 
 
 Std MRev

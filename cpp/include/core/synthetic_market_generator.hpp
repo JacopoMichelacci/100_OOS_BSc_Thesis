@@ -117,6 +117,7 @@ public:
             path[0].high = data[0].high;
             path[0].low = data[0].low;
             path[0].close = data[0].close;
+            double prev_close = data[0].close;
 
             for (std::size_t i = 1; i < path.size(); ++i) {
                 // mu and sigma are per input bar, so dt is implicitly 1 bar

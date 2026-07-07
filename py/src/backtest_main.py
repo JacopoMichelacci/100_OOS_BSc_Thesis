@@ -213,6 +213,7 @@ def write_markdown_report(
         f"| Cost per trade | {cost_bps} bps |",
         f"| OOS start date | {metadata.get('run_start_date', '')} |",
         f"| OOS end date | {metadata.get('run_end_date', '')} |",
+        f"| Sample | {metadata.get('sample', '')} |",
         f"| OOS test pct | {metadata.get('oos_test_pct', '')} |",
         f"| Resample | {metadata.get('resample', '')} |",
         "",
