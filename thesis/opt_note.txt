@@ -18,12 +18,14 @@ Resting parameters before optimization:
 - slpct: -1
 
 
-AAPL optimization 2000-present:
+AAPL optimization 70% of 2000-present:
 -   -   -   -   -   -   -   -
 benchmark:
 - slpct: -1
+
 - fast_len: 50
 - slow_len: 200
+
 performance with the same parameters (proving gmb_rolling_thresh) is good path approximator and not pure randomness:
 standard thesis summary (Diff = OOS - IS)
 Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
@@ -58,4 +60,26 @@ Resting parameters before optimization:
 - lower_std_thresh: -1.5
 - upper_std_thresh: 1.5
 - slpct: -1
+
+
+AAPL optimization 70% of 2000-present:
+-   -   -   -   -   -   -   -
+benchmark:
+- slpct: 2.5
+
+- std_len: 20
+- threshes: +-0.2 (ovewritten)
+
+- upper_thresh: 1.0
+- lower_thresh: -0.35
+
+
+synthetic:
+- slpct: 2.0
+
+- std_len: 150
+- threshes: +-2.5 (ovewritten)
+
+- upper_thresh: 3.0
+- lower_thresh: -0.30
 
