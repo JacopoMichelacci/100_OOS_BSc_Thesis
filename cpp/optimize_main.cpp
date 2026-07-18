@@ -10,6 +10,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "utils/csv_loader.hpp"
@@ -68,6 +69,8 @@ enum class OPT_PARAM {
     MAC_SLPCT,
     STD_LEN,
     STD_THRESH,
+    STD_LOWER_THRESH,
+    STD_UPPER_THRESH,
     STD_SLPCT
 };
 
@@ -118,6 +121,7 @@ struct ExperimentConfig {
     PRICE_FIELD std_price_field = PRICE_FIELD::CLOSE;
     double std_lower_thresh = -1.5;
     double std_upper_thresh = 1.5;
+    bool std_link_to_upper = false;
     double std_slpct = -1.0;
     double std_slnot = -1.0;
 };
@@ -149,6 +153,10 @@ const char* param_name(OPT_PARAM param) {
             return "std_len";
         case OPT_PARAM::STD_THRESH:
             return "threshold";
+        case OPT_PARAM::STD_LOWER_THRESH:
+            return "lower_threshold";
+        case OPT_PARAM::STD_UPPER_THRESH:
+            return "upper_threshold";
         case OPT_PARAM::STD_SLPCT:
             return "slpct";
         default:
@@ -194,7 +202,7 @@ BacktestResults run_one_backtest(
                     slow_len = static_cast<int>(std::lround(value));
                     break;
                 case OPT_PARAM::MAC_SLPCT:
-                    slpct = value / 100.0;
+                    slpct = value;
                     break;
                 default:
                     throw std::invalid_argument("selected optimized_param is not valid for MAC");
@@ -235,8 +243,14 @@ BacktestResults run_one_backtest(
                     lower_thresh = -value;
                     upper_thresh = value;
                     break;
+                case OPT_PARAM::STD_LOWER_THRESH:
+                    lower_thresh = value;
+                    break;
+                case OPT_PARAM::STD_UPPER_THRESH:
+                    upper_thresh = value;
+                    break;
                 case OPT_PARAM::STD_SLPCT:
-                    slpct = value / 100.0;
+                    slpct = value;
                     break;
                 default:
                     throw std::invalid_argument("selected optimized_param is not valid for Std_MRev");
@@ -251,6 +265,7 @@ BacktestResults run_one_backtest(
             .price_field = cfg.std_price_field,
             .lower_std_thresh = lower_thresh,
             .upper_std_thresh = upper_thresh,
+            .link_to_upper = cfg.std_link_to_upper,
             .slnot = cfg.std_slnot,
             .slpct = slpct,
             .pos_sizing_mode = SIZING_MODE::FIXED,
@@ -359,7 +374,7 @@ OptMetrics calc_metrics(const BacktestResults& results, double initial_capital, 
     metrics.max_dd = calc_max_dd(results.equity_curve);
     metrics.max_dd_not = calc_max_dd_not(results.equity_curve);
 
-    std::vector<OpenLot> open_lots;
+    std::unordered_map<long long, OrderEvent> entries;
     double total_trade_pnl = 0.0;
 
     for (const auto& order : results.hlog) {
@@ -367,50 +382,37 @@ OptMetrics calc_metrics(const BacktestResults& results, double initial_capital, 
             continue;
         }
 
-        double signed_qty = 0.0;
-        switch (order.signal) {
-            case SIGNAL::BBUY:
-            case SIGNAL::LONG:
-            case SIGNAL::COVER:
-                signed_qty = order.qty;
-                break;
-            case SIGNAL::BSELL:
-            case SIGNAL::SHORT:
-            case SIGNAL::SELL:
-                signed_qty = -order.qty;
-                break;
-            default:
-                continue;
+        if (order.pid == -1) {
+            if (
+                order.signal == SIGNAL::BBUY ||
+                order.signal == SIGNAL::LONG ||
+                order.signal == SIGNAL::BSELL ||
+                order.signal == SIGNAL::SHORT
+            ) {
+                entries[order.id] = order;
+            }
+            continue;
         }
 
-        double remaining_qty = signed_qty;
-
-        while (!open_lots.empty() && open_lots.front().qty * remaining_qty < 0.0) {
-            auto& lot = open_lots.front();
-            const double close_qty = std::min(std::abs(lot.qty), std::abs(remaining_qty));
-            const bool is_long = lot.qty > 0.0;
-            const double pnl = is_long
-                ? (order.price - lot.entry_price) * close_qty
-                : (lot.entry_price - order.price) * close_qty;
-
-            total_trade_pnl += pnl;
-            ++metrics.n_trades;
-
-            if (std::abs(lot.qty) == close_qty) {
-                remaining_qty += lot.qty;
-                open_lots.erase(open_lots.begin());
-            }
-            else {
-                lot.qty += close_qty * (lot.qty > 0.0 ? -1.0 : 1.0);
-                remaining_qty = 0.0;
-            }
+        const auto entry_it = entries.find(order.pid);
+        if (entry_it == entries.end()) {
+            continue;
         }
 
-        if (remaining_qty != 0.0) {
-            open_lots.push_back(OpenLot{
-                .qty = remaining_qty,
-                .entry_price = order.price
-            });
+        const auto& entry = entry_it->second;
+        const bool is_long = entry.signal == SIGNAL::BBUY || entry.signal == SIGNAL::LONG;
+        const double pnl = is_long
+            ? (order.price - entry.price) * order.qty
+            : (entry.price - order.price) * order.qty;
+
+        total_trade_pnl += pnl;
+        ++metrics.n_trades;
+
+        if (entry.qty <= order.qty + 1e-12) {
+            entries.erase(entry_it);
+        }
+        else {
+            entries[order.pid].qty -= order.qty;
         }
     }
 
@@ -476,9 +478,9 @@ int main() {
     // Change this block for normal optimization experiments.
     ExperimentConfig cfg{
         .strategy = OPT_STRATEGY::STD_MREV,
-        .optimized_param_1 = OPT_PARAM::STD_THRESH,
+        .optimized_param_1 = OPT_PARAM::STD_SLPCT,
         .optimized_param_2 = OPT_PARAM::NONE,
-        .grid_1 = arange(0.5, 5.0, 0.1),
+        .grid_1 = arange(0.0, 50.0, 0.1),
         .grid_2 = {},
         .data_mode = OPT_DATA_MODE::HISTORICAL_IS,
 
@@ -497,6 +499,7 @@ int main() {
         .synthetic_seed = 42,
         .synthetic_max_attempts = 10000,
 
+        // resting macs params
         .mac_fast_len = 50,
         .mac_slow_len = 100,
         .mac_fast_price_field = PRICE_FIELD::CLOSE,
@@ -504,11 +507,13 @@ int main() {
         .mac_slpct = -1.0,
         .mac_slnot = -1.0,
 
-        .std_len = 15,
+        // resting stdmrev params
+        .std_len = 150,
         .std_price_field = PRICE_FIELD::CLOSE,
-        .std_lower_thresh = -1.5,
-        .std_upper_thresh = 1.5,
-        .std_slpct = -1.0,
+        .std_lower_thresh = -0.3,
+        .std_upper_thresh = 3.0,
+        .std_link_to_upper = false,
+        .std_slpct = 2.0,
         .std_slnot = -1.0
     };
 
@@ -647,6 +652,7 @@ int main() {
     metadata << "std_len," << cfg.std_len << "\n";
     metadata << "std_lower_thresh," << cfg.std_lower_thresh << "\n";
     metadata << "std_upper_thresh," << cfg.std_upper_thresh << "\n";
+    metadata << "std_link_to_upper," << cfg.std_link_to_upper << "\n";
     metadata << "std_slpct," << cfg.std_slpct << "\n";
     metadata << "synthetic_iter," << cfg.synthetic_iter << "\n";
     metadata << "synthetic_vol_window," << cfg.synthetic_vol_window << "\n";

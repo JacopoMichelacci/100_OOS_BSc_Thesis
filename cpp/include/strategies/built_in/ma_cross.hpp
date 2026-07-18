@@ -19,7 +19,7 @@ struct MACConfig {
     PRICE_FIELD slow_price_field = PRICE_FIELD::CLOSE;
 
     double slnot = -1.0;
-    double slpct = -1.0;
+    double slpct = -1.0;  // percent, e.g. 2.0 = 2%; negative disables
 
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED;
     double qty = 1.0;

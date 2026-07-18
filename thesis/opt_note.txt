@@ -73,6 +73,12 @@ benchmark:
 - upper_thresh: 1.0
 - lower_thresh: -0.35
 
+standard thesis summary (Diff = OOS - IS)
+Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
+IS                 33.07         -0.01          0.32          0.01        127.41
+OOS               207.59         -0.16          0.41          0.21        122.40
+Diff              174.52         -0.15          0.10          0.20         -5.01
+
 
 synthetic:
 - slpct: 2.0
@@ -83,3 +89,8 @@ synthetic:
 - upper_thresh: 3.0
 - lower_thresh: -0.30
 
+synthetic thesis summary (Diff = OOS - IS)
+Sample        Net Profit      Max DD %        Sharpe    Avg Profit   Trades/Year
+IS                640.31         -0.14          0.70          0.39         84.92
+OOS              1842.71         -0.93          0.56          2.63         74.53
+Diff             1202.40         -0.79         -0.14          2.24        -10.39

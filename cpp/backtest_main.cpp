@@ -5,6 +5,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "utils/csv_loader.hpp"
@@ -14,7 +15,7 @@
 #include "core/synthetic_market_generator.hpp"
 
 
-#include "strategies/built_in/ma_cross.hpp"
+#include "strategies/built_in/std_mrev.hpp"
 #include "backtest/backtest.hpp"
 #include "backtest/backtest_io.hpp"
 
@@ -139,7 +140,7 @@ ThesisMetrics calc_thesis_metrics(
     metrics.max_dd_pct = calc_max_dd_pct(results.equity_curve);
     metrics.sharpe = calc_sharpe(results.equity_curve, periods_per_year);
 
-    std::vector<OpenLot> open_lots;
+    std::unordered_map<long long, OrderEvent> entries;
     double total_trade_pnl = 0.0;
 
     for (const auto& order : results.hlog) {
@@ -147,50 +148,37 @@ ThesisMetrics calc_thesis_metrics(
             continue;
         }
 
-        double signed_qty = 0.0;
-        switch (order.signal) {
-            case SIGNAL::BBUY:
-            case SIGNAL::LONG:
-            case SIGNAL::COVER:
-                signed_qty = order.qty;
-                break;
-            case SIGNAL::BSELL:
-            case SIGNAL::SHORT:
-            case SIGNAL::SELL:
-                signed_qty = -order.qty;
-                break;
-            default:
-                continue;
+        if (order.pid == -1) {
+            if (
+                order.signal == SIGNAL::BBUY ||
+                order.signal == SIGNAL::LONG ||
+                order.signal == SIGNAL::BSELL ||
+                order.signal == SIGNAL::SHORT
+            ) {
+                entries[order.id] = order;
+            }
+            continue;
         }
 
-        double remaining_qty = signed_qty;
-
-        while (!open_lots.empty() && open_lots.front().qty * remaining_qty < 0.0) {
-            auto& lot = open_lots.front();
-            const double close_qty = std::min(std::abs(lot.qty), std::abs(remaining_qty));
-            const bool is_long = lot.qty > 0.0;
-            const double pnl = is_long
-                ? (order.price - lot.entry_price) * close_qty
-                : (lot.entry_price - order.price) * close_qty;
-
-            total_trade_pnl += pnl;
-            ++metrics.n_trades;
-
-            if (std::abs(lot.qty) == close_qty) {
-                remaining_qty += lot.qty;
-                open_lots.erase(open_lots.begin());
-            }
-            else {
-                lot.qty += close_qty * (lot.qty > 0.0 ? -1.0 : 1.0);
-                remaining_qty = 0.0;
-            }
+        const auto entry_it = entries.find(order.pid);
+        if (entry_it == entries.end()) {
+            continue;
         }
 
-        if (remaining_qty != 0.0) {
-            open_lots.push_back(OpenLot{
-                .qty = remaining_qty,
-                .entry_price = order.price
-            });
+        const auto& entry = entry_it->second;
+        const bool is_long = entry.signal == SIGNAL::BBUY || entry.signal == SIGNAL::LONG;
+        const double pnl = is_long
+            ? (order.price - entry.price) * order.qty
+            : (entry.price - order.price) * order.qty;
+
+        total_trade_pnl += pnl;
+        ++metrics.n_trades;
+
+        if (entry.qty <= order.qty + 1e-12) {
+            entries.erase(entry_it);
+        }
+        else {
+            entries[order.pid].qty -= order.qty;
         }
     }
 
@@ -212,8 +200,6 @@ void print_metrics_row(const std::string& label, const ThesisMetrics& metrics) {
               << std::setw(14) << metrics.trades_per_year
               << "\n";
 }
-
-
 ThesisMetrics mean_metrics(const std::vector<ThesisMetrics>& metrics_list) {
     ThesisMetrics out;
     if (metrics_list.empty()) {
@@ -275,7 +261,7 @@ void print_metrics_table(
 }
 
 
-MAC<OHLCVEvent> make_strategy();
+Std_MRev<OHLCVEvent> make_strategy();
 
 
 void run_standard_thesis_eval(
@@ -333,14 +319,15 @@ void run_synthetic_thesis_eval(
 }
 
 
-MAC<OHLCVEvent> make_strategy() {
-    return MAC<OHLCVEvent>("ma_cross_demo", MACConfig<OHLCVEvent>{
-        .fast_len = 35,
-        .fast_price_field = PRICE_FIELD::CLOSE,
-        .slow_len = 200,
-        .slow_price_field = PRICE_FIELD::CLOSE,
+Std_MRev<OHLCVEvent> make_strategy() {
+    return Std_MRev<OHLCVEvent>("std_mrev_demo", Std_MrevConfig<OHLCVEvent>{
+        .std_len = 150,
+        .price_field = PRICE_FIELD::CLOSE,
+        .lower_std_thresh = -0.30,
+        .upper_std_thresh = 3.0,
+        .link_to_upper = false,
         .slnot = -1.0,
-        .slpct = -1.0,
+        .slpct = 2.0,
         .pos_sizing_mode = SIZING_MODE::FIXED,
         .qty = 1.0
     });
@@ -358,7 +345,7 @@ int main() {
     const double oos_test_pct = 0.3;
     const double is_optimization_pct = 1.0 - oos_test_pct;
     const BT_SAMPLE sample = BT_SAMPLE::ALL;
-    const THESIS_EVAL_MODE thesis_eval_mode = THESIS_EVAL_MODE::BOTH;
+    const THESIS_EVAL_MODE thesis_eval_mode = THESIS_EVAL_MODE::SYNTHETIC;
     const int synthetic_iter = 50;
     const int synthetic_vol_window = 30;
     const double synthetic_threshold_mult = 10.0;

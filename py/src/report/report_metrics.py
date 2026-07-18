@@ -460,6 +460,53 @@ class Metrics:
             .sort(["ts", "id"])
         )
 
+        if "pid" in filled_orders.columns:
+            entries = {
+                int(row["id"]): row
+                for row in (
+                    filled_orders
+                    .filter(pl.col("pid") == -1)
+                    .iter_rows(named=True)
+                )
+            }
+            exits = filled_orders.filter(pl.col("pid") != -1)
+
+            trades: list[dict[str, float | int | str]] = []
+            next_trade_id = 1
+
+            for exit_row in exits.iter_rows(named=True):
+                entry = entries.get(int(exit_row["pid"]))
+                if entry is None:
+                    continue
+
+                side = "long" if entry["signal"] in ["bbuy", "long"] else "short"
+                qty = float(exit_row["qty"])
+                entry_price = float(entry["price"])
+                exit_price = float(exit_row["price"])
+                pnl = (
+                    (exit_price - entry_price) * qty
+                    if side == "long"
+                    else (entry_price - exit_price) * qty
+                )
+                pnl_pct = pnl / (entry_price * qty) * 100.0 if entry_price else 0.0
+
+                trades.append(
+                    {
+                        "trade_id": next_trade_id,
+                        "entry_ts": int(entry["ts"]),
+                        "exit_ts": int(exit_row["ts"]),
+                        "side": side,
+                        "qty": qty,
+                        "entry_price": entry_price,
+                        "exit_price": exit_price,
+                        "pnl": pnl,
+                        "pnl_pct": pnl_pct,
+                    }
+                )
+                next_trade_id += 1
+
+            return pl.DataFrame(trades)
+
         trades: list[dict[str, float | int | str]] = []
         open_lots: list[dict[str, float | int]] = []
         next_trade_id = 1

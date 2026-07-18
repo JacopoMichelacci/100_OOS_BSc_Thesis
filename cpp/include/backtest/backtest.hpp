@@ -48,10 +48,7 @@ public:
             const auto& in = input[i];
 
             // execute pending orders (no look ahead)
-            execute_orders(plog, in.open, in.ts, cash, opos, oposlog, id_gen, strat);
-
-            // hlog update1
-            results.hlog.insert(results.hlog.end(), plog.begin(), plog.end());
+            execute_orders(plog, in.open, in.ts, cash, opos, oposlog, results.hlog, id_gen, strat);
 
             // execute stop losses
             execute_stop_losses(oposlog, in.high, in.low, in.ts, cash, opos, results.hlog, id_gen, strat);
@@ -123,8 +120,10 @@ private:
 
     void close_open_lots(std::vector<OrderEvent>& oposlog,
                          SIGNAL side,
-                         double qty) {
-        double remaining = qty;
+                         OrderEvent& closing_order,
+                         std::vector<OrderEvent>& hlog,
+                         OrderIdGenerator& id_gen) {
+        double remaining = closing_order.qty;
         
         // traverse oposlog and reduce quantity with FIFO
         for (auto it = oposlog.begin(); it != oposlog.end() && remaining > 0.0;) {
@@ -134,6 +133,14 @@ private:
             }
 
             const double closed_qty = std::min(it->qty, remaining);
+
+            OrderEvent exit_part = closing_order;
+            exit_part.id = id_gen.next();
+            exit_part.pid = it->id;
+            exit_part.qty = closed_qty;
+            exit_part.status = ORDER_STATUS::FILLED;
+            hlog.emplace_back(exit_part);
+
             it->qty -= closed_qty;
             remaining -= closed_qty;
 
@@ -167,7 +174,7 @@ private:
         const bool has_slpct = lot.sl.slpct > 0.0;
 
         if (lot.signal == SIGNAL::LONG) {
-            const double pct_stop = lot.price * (1.0 - lot.sl.slpct);
+            const double pct_stop = lot.price * (1.0 - lot.sl.slpct / 100.0);
             const double not_stop = lot.price - lot.sl.slnot;
 
             if (has_slnot && has_slpct) return std::max(pct_stop, not_stop);
@@ -175,7 +182,7 @@ private:
             return not_stop;
         }
 
-        const double pct_stop = lot.price * (1.0 + lot.sl.slpct);
+        const double pct_stop = lot.price * (1.0 + lot.sl.slpct / 100.0);
         const double not_stop = lot.price + lot.sl.slnot;
 
         if (has_slnot && has_slpct) return std::min(pct_stop, not_stop);
@@ -220,6 +227,7 @@ private:
             exit_order.price = stop;
             exit_order.strategy_id = strat.get_id();
             exit_order.id = id_gen.next();
+            exit_order.pid = it->id;
             exit_order.reason = "stop loss";
 
             if (it->signal == SIGNAL::LONG) {
@@ -243,6 +251,7 @@ private:
                         double& cash,
                         double& opos,
                         std::vector<OrderEvent>& oposlog,
+                        std::vector<OrderEvent>& hlog,
                         OrderIdGenerator& id_gen,
                         Strategy<Tin>& strat) {
 
@@ -256,78 +265,97 @@ private:
             ord.ts          = exec_ts;
             ord.strategy_id = strat.get_id();
             ord.id          = id_gen.next();
+            ord.pid         = -1;
 
-            if (!sc.active) { reject(ord, "strategy not active"); continue; }
+            if (!sc.active) { reject(ord, "strategy not active"); hlog.emplace_back(ord); continue; }
 
             switch (ord.signal) {
                 case SIGNAL::LONG:
-                    if (!sc.long_active)              { reject(ord, "longs disabled"); break; }
-                    if (opos < 0)                     { reject(ord, "LONG while short"); break; }
-                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); break; }
+                    if (!sc.long_active)              { reject(ord, "longs disabled"); hlog.emplace_back(ord); break; }
+                    if (opos < 0)                     { reject(ord, "LONG while short"); hlog.emplace_back(ord); break; }
+                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); hlog.emplace_back(ord); break; }
                     fill_buy(ord, exec_price, cash, opos);
                     add_open_lot(oposlog, ord, SIGNAL::LONG, ord.qty);
+                    hlog.emplace_back(ord);
                     break;
 
                 case SIGNAL::SHORT:
-                    if (!sc.short_active)             { reject(ord, "shorts disabled"); break; }
-                    if (opos > 0)                     { reject(ord, "SHORT while long"); break; }
-                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); break; }
+                    if (!sc.short_active)             { reject(ord, "shorts disabled"); hlog.emplace_back(ord); break; }
+                    if (opos > 0)                     { reject(ord, "SHORT while long"); hlog.emplace_back(ord); break; }
+                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); hlog.emplace_back(ord); break; }
                     fill_sell(ord, exec_price, cash, opos);
                     add_open_lot(oposlog, ord, SIGNAL::SHORT, ord.qty);
+                    hlog.emplace_back(ord);
                     break;
 
                 case SIGNAL::SELL:
-                    if (opos <= 0)                    { reject(ord, "SELL while not long"); break; }
-                    if (ord.qty > opos)               { reject(ord, "SELL exceeds long position"); break; }
+                    if (opos <= 0)                    { reject(ord, "SELL while not long"); hlog.emplace_back(ord); break; }
+                    if (ord.qty > opos)               { reject(ord, "SELL exceeds long position"); hlog.emplace_back(ord); break; }
                     fill_sell(ord, exec_price, cash, opos);
-                    close_open_lots(oposlog, SIGNAL::LONG, ord.qty);
+                    close_open_lots(oposlog, SIGNAL::LONG, ord, hlog, id_gen);
                     break;
 
                 case SIGNAL::COVER:
-                    if (opos >= 0)                    { reject(ord, "COVER while not short"); break; }
-                    if (ord.qty > -opos)              { reject(ord, "COVER exceeds short position"); break; }
+                    if (opos >= 0)                    { reject(ord, "COVER while not short"); hlog.emplace_back(ord); break; }
+                    if (ord.qty > -opos)              { reject(ord, "COVER exceeds short position"); hlog.emplace_back(ord); break; }
                     fill_buy(ord, exec_price, cash, opos);
-                    close_open_lots(oposlog, SIGNAL::SHORT, ord.qty);
+                    close_open_lots(oposlog, SIGNAL::SHORT, ord, hlog, id_gen);
                     break;
 
                 case SIGNAL::BBUY:
                     if (!sc.long_active && (opos >= 0 || ord.qty > -opos)) {
-                        reject(ord, "longs disabled"); break;
+                        reject(ord, "longs disabled"); hlog.emplace_back(ord); break;
                     }
-                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); break; }
+                    if (!sc.stacking && opos > 0)     { reject(ord, "stacking disabled"); hlog.emplace_back(ord); break; }
                     {
                     const double prev_opos = opos;
                     fill_buy(ord, exec_price, cash, opos);
 
                     // have meaningful and signal independent oposlog
                     if (prev_opos < 0.0) {
-                        close_open_lots(oposlog, SIGNAL::SHORT, std::min(ord.qty, -prev_opos));
+                        OrderEvent cover_part = ord;
+                        cover_part.signal = SIGNAL::COVER;
+                        cover_part.qty = std::min(ord.qty, -prev_opos);
+                        close_open_lots(oposlog, SIGNAL::SHORT, cover_part, hlog, id_gen);
                     }
                     if (prev_opos >= 0.0) {
                         add_open_lot(oposlog, ord, SIGNAL::LONG, ord.qty);
+                        hlog.emplace_back(ord);
                     }
                     else if (opos > 0.0) {
-                        add_open_lot(oposlog, ord, SIGNAL::LONG, opos);
+                        OrderEvent long_part = ord;
+                        long_part.id = id_gen.next();
+                        long_part.qty = opos;
+                        add_open_lot(oposlog, long_part, SIGNAL::LONG, long_part.qty);
+                        hlog.emplace_back(long_part);
                     }
                     }
                     break;
 
                 case SIGNAL::BSELL:
                     if (!sc.short_active && (opos <= 0 || ord.qty > opos)) {
-                        reject(ord, "shorts disabled"); break;
+                        reject(ord, "shorts disabled"); hlog.emplace_back(ord); break;
                     }
-                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); break; }
+                    if (!sc.stacking && opos < 0)     { reject(ord, "stacking disabled"); hlog.emplace_back(ord); break; }
                     {
                     const double prev_opos = opos;
                     fill_sell(ord, exec_price, cash, opos);
                     if (prev_opos > 0.0) {
-                        close_open_lots(oposlog, SIGNAL::LONG, std::min(ord.qty, prev_opos));
+                        OrderEvent sell_part = ord;
+                        sell_part.signal = SIGNAL::SELL;
+                        sell_part.qty = std::min(ord.qty, prev_opos);
+                        close_open_lots(oposlog, SIGNAL::LONG, sell_part, hlog, id_gen);
                     }
                     if (prev_opos <= 0.0) {
                         add_open_lot(oposlog, ord, SIGNAL::SHORT, ord.qty);
+                        hlog.emplace_back(ord);
                     }
                     else if (opos < 0.0) {
-                        add_open_lot(oposlog, ord, SIGNAL::SHORT, -opos);
+                        OrderEvent short_part = ord;
+                        short_part.id = id_gen.next();
+                        short_part.qty = -opos;
+                        add_open_lot(oposlog, short_part, SIGNAL::SHORT, short_part.qty);
+                        hlog.emplace_back(short_part);
                     }
                     }
                     break;

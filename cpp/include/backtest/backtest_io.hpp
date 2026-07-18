@@ -86,9 +86,9 @@ void write_backtest_results(
         return;
     }
 
-    orders_out << "id,ts,signal,qty,price,status,reason\n";
+    orders_out << "id,pid,ts,signal,qty,price,status,reason\n";
     for (const auto& o : results.hlog) {
-        orders_out << o.id << "," << o.ts << "," << o.signal << ","
+        orders_out << o.id << "," << o.pid << "," << o.ts << "," << o.signal << ","
                    << o.qty << "," << o.price << "," << o.status << ","
                    << o.reason << "\n";
     }

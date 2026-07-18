@@ -18,9 +18,10 @@ struct Std_MrevConfig {
     PRICE_FIELD price_field = PRICE_FIELD::CLOSE;
     double lower_std_thresh = -1.5;
     double upper_std_thresh = 1.5;
+    bool link_to_upper = false;
 
     double slnot = -1.0;
-    double slpct = -1.0;
+    double slpct = -1.0;  // percent, e.g. 2.0 = 2%; negative disables
 
     SIZING_MODE pos_sizing_mode = SIZING_MODE::FIXED_FRACTIONAL_PRICE;
     double qty = 1.0;
@@ -40,6 +41,14 @@ public:
         //safety checks
         if (params.std_len < 2) {
             throw std::invalid_argument("Std_MRev std_len must be at least 2");
+        }
+
+        const double lower_thresh = params.link_to_upper ? -params.upper_std_thresh : params.lower_std_thresh;
+        if (lower_thresh >= 0.0) {
+            throw std::invalid_argument("Std_MRev lower_std_thresh must be negative");
+        }
+        if (params.upper_std_thresh <= 0.0) {
+            throw std::invalid_argument("Std_MRev upper_std_thresh must be positive");
         }
 
         if (params.qty <= 0.0) {
@@ -76,10 +85,11 @@ public:
         }
 
         const double standardized_move = last_move / *rolling_std;
+        const double lower_thresh = params.link_to_upper ? -params.upper_std_thresh : params.lower_std_thresh;
 
         // LONG
         if (this->bconfig.long_active) {
-            if (standardized_move <= params.lower_std_thresh) {
+            if (standardized_move <= lower_thresh) {
                 if (!this->bconfig.stacking && ctx.opos > 0.0) {
                     return;
                 }

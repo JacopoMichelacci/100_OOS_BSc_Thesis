@@ -57,7 +57,7 @@ std::ostream& operator<<(std::ostream& os, STOP_TYPE type);
 struct StopLoss {
     STOP_TYPE type = STOP_TYPE::NONE;
     double slnot = -1.0;
-    double slpct = -1.0;
+    double slpct = -1.0;  // percent, e.g. 2.0 = 2%; negative disables
 };
 
 class OrderIdGenerator {
@@ -99,6 +99,7 @@ public:
     StopLoss sl = {};
     long long strategy_id = -1;                 // a unique identifier for a strategy; unique int given at construction 
     long long id = -1;                          // id of the order event
+    long long pid = -1;                         // parent entry order id; -1 for entries
     ORDER_STATUS status = ORDER_STATUS::PENDING;
     std::string reason = "";
 };

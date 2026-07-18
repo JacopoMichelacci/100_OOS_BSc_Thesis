@@ -108,6 +108,7 @@ def plot_metric_lines(results: pl.DataFrame, optimized_param: str) -> list[Path]
             ax.set_xlabel(optimized_param)
             ax.set_ylabel("Max Drawdown (%)", color=color)
             ax.tick_params(axis="y", labelcolor=color)
+            ax.ticklabel_format(style="plain", useOffset=False, axis="y")
             ax.grid(True, alpha=0.3)
 
             ax_not = ax.twinx()
@@ -123,6 +124,7 @@ def plot_metric_lines(results: pl.DataFrame, optimized_param: str) -> list[Path]
             )
             ax_not.set_ylabel("Max Drawdown Notional", color="firebrick")
             ax_not.tick_params(axis="y", labelcolor="firebrick")
+            ax_not.ticklabel_format(style="plain", useOffset=False, axis="y")
 
             lines = pct_line + not_line
             labels = [line.get_label() for line in lines]
@@ -141,6 +143,9 @@ def plot_metric_lines(results: pl.DataFrame, optimized_param: str) -> list[Path]
             ax.set_xlabel(optimized_param)
             ax.set_ylabel(label, color=color)
             ax.tick_params(axis="y", labelcolor=color)
+            ax.ticklabel_format(style="plain", useOffset=False, axis="y")
+            if metric == "n_trades_per_year":
+                ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda value, _: f"{value:.1f}"))
             ax.grid(True, alpha=0.3)
             ax.legend(loc="best")
 
@@ -230,6 +235,7 @@ def write_markdown_report(metadata: dict[str, str], plot_paths: list[Path]) -> N
     optimized_param = metadata.get("optimized_param_1", metadata.get("optimized_param", ""))
     optimized_param_2 = metadata.get("optimized_param_2", "none")
     has_second_param = bool(optimized_param_2 and optimized_param_2 != "none")
+    strategy = metadata.get("strategy", "")
     fast_len = metadata.get("fast_len", metadata.get("mac_fast_len", ""))
     slow_len = metadata.get("slow_len", metadata.get("mac_slow_len", ""))
     best_param = metadata.get("best_value_1", metadata.get(f"best_{optimized_param}", ""))
@@ -241,7 +247,7 @@ def write_markdown_report(metadata: dict[str, str], plot_paths: list[Path]) -> N
         "",
         "| Field | Value |",
         "|---|---|",
-        f"| Strategy | {metadata.get('strategy', '')} |",
+        f"| Strategy | {strategy} |",
         f"| Data | {metadata.get('data', '')} |",
         f"| Data mode | {metadata.get('data_mode', '')} |",
         f"| IS start date | {metadata.get('is_start_date', '')} |",
@@ -249,8 +255,6 @@ def write_markdown_report(metadata: dict[str, str], plot_paths: list[Path]) -> N
         f"| IS optimization pct | {metadata.get('is_optimization_pct', '')} |",
         f"| OOS test pct | {metadata.get('oos_test_pct', '')} |",
         f"| Optimized parameter 1 | {optimized_param} |",
-        f"| Fast length | {fast_len} |",
-        f"| Slow length | {slow_len} |",
         f"| Objective | {metadata.get('objective', '')} |",
         f"| Best {optimized_param} | {best_param} |",
         f"| Sharpe | {best_sharpe} |",
@@ -260,9 +264,21 @@ def write_markdown_report(metadata: dict[str, str], plot_paths: list[Path]) -> N
     ]
 
     if has_second_param:
-        insert_idx = lines.index(f"| Fast length | {fast_len} |")
+        insert_idx = lines.index(f"| Optimized parameter 1 | {optimized_param} |") + 1
         lines.insert(insert_idx, f"| Optimized parameter 2 | {optimized_param_2} |")
         lines.insert(lines.index(f"| Sharpe | {best_sharpe} |"), f"| Best {optimized_param_2} | {best_param_2} |")
+
+    if strategy == "MAC":
+        insert_idx = lines.index(f"| Objective | {metadata.get('objective', '')} |")
+        lines.insert(insert_idx, f"| Fast length | {fast_len} |")
+        lines.insert(insert_idx + 1, f"| Slow length | {slow_len} |")
+
+    if strategy == "Std_MRev":
+        insert_idx = lines.index(f"| Objective | {metadata.get('objective', '')} |")
+        lines.insert(insert_idx, f"| Std length | {metadata.get('std_len', '')} |")
+        lines.insert(insert_idx + 1, f"| Lower threshold | {metadata.get('std_lower_thresh', '')} |")
+        lines.insert(insert_idx + 2, f"| Upper threshold | {metadata.get('std_upper_thresh', '')} |")
+        lines.insert(insert_idx + 3, f"| Link to upper | {metadata.get('std_link_to_upper', '')} |")
 
     for plot_path in plot_paths:
         lines.extend([
