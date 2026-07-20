@@ -1,1 +1,81 @@
-This chapter summarizes the main findings, limitations, and possible future improvements.
+\section{Summary of findings}
+
+This thesis compared two ways of optimizing rule-based trading strategies. The standard approach
+optimizes directly on the historical IS period. The alternative approach optimizes on multiple
+synthetic paths generated from that same IS period. Both approaches are then tested on the same real OOS
+period.
+
+The results answer two different questions. First, whether the synthetic paths are a reasonable
+approximation of the real IS market. Second, whether optimizing on those paths reduces the IS/OOS
+performance gap.
+
+\section{Synthetic markets as realistic path approximators}
+
+On the first question, the results are positive. When the same benchmark parameters were evaluated on
+the synthetic IS paths for MA Cross, the mean synthetic performance remained close to the real IS
+performance. I did not repeat this same-parameter validation for Std MRev, because
+Figure~\ref{fig:synthetic-threshold-gbm} already shows that the threshold-constrained paths remain close
+to the original market path. The generator therefore seems to produce paths that remain connected to
+the original market, rather than unrelated random walks with the same starting price.
+
+\section{Does synthetic-market optimization reduce overfitting?}
+
+On the second question, the result is weaker. In these experiments, synthetic-path optimization does not
+show a clear reduction in overfitting. Across the two strategies:
+
+\begin{itemize}
+    \item For MA Cross, the synthetic workflow produced a larger net profit gap than the standard
+    workflow (\(-57.94\) versus \(-38.49\)). The Sharpe gap was slightly smaller, but the OOS Sharpe was
+    still worse.
+    \item For Std MRev, the standard workflow had a positive Sharpe gap, while the synthetic workflow
+    had a negative Sharpe gap of \(-0.14\).
+\end{itemize}
+
+The expected pattern would be a consistently smaller IS/OOS gap under the synthetic workflow. That
+pattern does not appear. With two strategies and one asset, this is not enough to reject the idea, but
+it is enough to say that the evidence in this thesis does not support it.
+
+The two findings should be kept separate. The synthetic paths behave reasonably well as market
+approximations. However, this does not automatically mean that optimizing on them improves OOS
+performance.
+
+\section{Limitations}
+
+Several limitations matter for the interpretation of these results.
+
+All experiments were run on a single asset, AAPL, over a single historical window and a single 70/30
+IS/OOS split. Strategy performance and IS/OOS gaps can change across assets and market regimes.
+
+All experiments used a fixed position size of one lot rather than a fractional or equity-scaled sizing
+rule. Because AAPL trades at higher prices in the OOS period, dollar metrics such as net profit and
+average trade are affected by the price level. This is why Sharpe and max DD percentage were given more
+weight in the discussion.
+
+Parameter selection at every stage, in both the historical and synthetic workflows, relied on visual
+inspection of grid plots for robust regions rather than automatic maximization. This was intentional,
+but it remains partly discretionary.
+
+The synthetic generator itself has one free parameter, the threshold multiplier \(k\) (the number of
+rolling standard deviations allowed around the original price), which was fixed at \(k = 10\)
+throughout and not optimized. The volatility window was likewise fixed at 30 bars. Both choices affect
+the generated paths, so the results are conditional on these settings.
+
+The optimizer is a plain grid search and is not parallelized, which constrained how fine and how wide
+the parameter grids could be, especially for two-dimensional synthetic optimizations where each grid
+point requires 50 backtests.
+
+\section{Future work}
+
+A natural extension is to repeat the comparison across more assets, more historical windows, and more
+strategies. This would show whether the pattern observed here is general or specific to this dataset.
+Using fixed-fractional sizing would also remove the price-level issue in dollar metrics.
+
+On the synthetic-generation side, it would be useful to treat the threshold multiplier and the
+volatility window as parameters to test, instead of fixed constants. The generator should also be
+compared with other synthetic-data methods, such as block bootstrapping of historical returns.
+
+Finally, the optimizer should be parallelized before this method is scaled further. At the moment, the
+synthetic workflow is computationally expensive because every grid point requires many backtests. Given
+that its OOS deterioration was not more predictable than the benchmark workflow in these experiments,
+the extra computation is not clearly justified yet. Parallelization would make wider grids and more
+synthetic paths practical, reducing noise without making the runtime excessive.

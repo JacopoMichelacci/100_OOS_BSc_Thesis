@@ -22,10 +22,10 @@ is disabled, the strategy cannot increase an already open position on the same s
 
 In the experiments, a fixed position size is used. This keeps the comparison focused on the
 optimization procedure and the trading rule, rather than on the effects of dynamic position sizing
-or compounding. Altough it could be argued that a fixed fractional positon sizing could highlight
-more realistically the effects of the 2 optimizations. As mentioned the framework also supports
-dynamic sizing based on current equity values, but this is not the sizing method used for the thesis
-optimization or results.
+or compounding. Although fixed-fractional position sizing could represent the effect of the two
+optimization methods more realistically, it is not the sizing method used for the thesis results. The
+framework supports dynamic sizing based on current equity values, but it is left outside the empirical
+comparison.
 
 Both strategies can attach a hard stop loss to newly opened positions. The stop can be defined
 either as a percentage move from the entry price or as a fixed notional price distance. Stop-loss
@@ -77,7 +77,7 @@ by dividing it by this rolling standard deviation:
 Z_t = \frac{\Delta P_t}{\sigma_t}.
 \]
 
-where \(\sigma_t\) is the rolling standard deviation of x recent price moves.
+where \(\sigma_t\) is the rolling standard deviation over the selected lookback window.
 
 A long signal is generated when the standardized move is below a lower threshold:
 

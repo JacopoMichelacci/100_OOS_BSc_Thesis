@@ -127,18 +127,19 @@ the selected parameters have one performance value during optimization and one p
 the real OOS period. If performance is much worse OOS, the optimized parameters likely captured too
 much of the specific optimization sample.
 
-For a metric \(M\) where higher values are better, the performance gap is defined as:
+For a metric \(M\) where higher values are better, the performance difference is defined as:
 
 \[
-\text{Performance Gap} = M_{opt} - M_{OOS}.
+\text{Diff} = M_{OOS} - M_{IS}.
 \]
 
-A smaller gap means that less performance was lost when moving from optimization to unseen data. In
-this thesis, the synthetic optimization method is considered less overfit if it produces a smaller
-IS-OOS gap than the historical benchmark on the same strategy and OOS period.
+With this convention, a more negative value means that more performance was lost when moving from IS
+optimization to OOS testing. In this thesis, the synthetic optimization method is considered less
+overfit if it produces a smaller deterioration than the historical benchmark on the same strategy and
+OOS period.
 
-For metrics where lower values are better, such as maximum drawdown, the interpretation is reversed:
-the relevant deterioration is an increase from optimization drawdown to OOS drawdown.
+For metrics where lower values are better, such as max DD, the interpretation is reversed: the relevant
+deterioration is an increase from IS drawdown to OOS drawdown.
 
 \section{Optimization protocol}
 

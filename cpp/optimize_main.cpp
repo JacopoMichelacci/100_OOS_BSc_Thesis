@@ -478,10 +478,10 @@ int main() {
     // Change this block for normal optimization experiments.
     ExperimentConfig cfg{
         .strategy = OPT_STRATEGY::STD_MREV,
-        .optimized_param_1 = OPT_PARAM::STD_SLPCT,
-        .optimized_param_2 = OPT_PARAM::NONE,
-        .grid_1 = arange(0.0, 50.0, 0.1),
-        .grid_2 = {},
+        .optimized_param_1 = OPT_PARAM::STD_UPPER_THRESH,
+        .optimized_param_2 = OPT_PARAM::STD_LOWER_THRESH,
+        .grid_1 = arange(0.0, 5.0, 0.1),
+        .grid_2 = arange(-5.0, 0.0, 0.1),
         .data_mode = OPT_DATA_MODE::HISTORICAL_IS,
 
         .data_path = "data/_data/equity/AAPL_ohlcv_2000-01-01_yf.csv",
@@ -508,12 +508,12 @@ int main() {
         .mac_slnot = -1.0,
 
         // resting stdmrev params
-        .std_len = 150,
+        .std_len = 20,
         .std_price_field = PRICE_FIELD::CLOSE,
-        .std_lower_thresh = -0.3,
-        .std_upper_thresh = 3.0,
+        .std_lower_thresh = -0.35,
+        .std_upper_thresh = 1.0,
         .std_link_to_upper = false,
-        .std_slpct = 2.0,
+        .std_slpct = 2.5,
         .std_slnot = -1.0
     };
 
