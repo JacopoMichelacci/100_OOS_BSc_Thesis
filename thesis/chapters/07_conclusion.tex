@@ -60,9 +60,15 @@ rolling standard deviations allowed around the original price), which was fixed 
 throughout and not optimized. The volatility window was likewise fixed at 30 bars. Both choices affect
 the generated paths, so the results are conditional on these settings.
 
-The optimizer is a plain grid search and is not parallelized, which constrained how fine and how wide
-the parameter grids could be, especially for two-dimensional synthetic optimizations where each grid
-point requires 50 backtests.
+In theory, synthetic optimization could allow a larger part of the original historical series to be
+kept for real-data testing, because parameters are selected on generated paths rather than directly on
+the real path. This thesis does not use that design. A 70/30 split is kept so that the synthetic
+workflow can be compared directly with the standard IS/OOS benchmark. Also, any data used to calibrate
+or anchor the synthetic generator should not be treated as fully OOS.
+
+The optimizer is a plain grid search and is not parallelized. This constrained how fine and how wide
+the parameter grids could be. In the synthetic workflow, each parameter combination is tested on every
+synthetic path, so using 50 paths means running 50 backtests for one grid point.
 
 \section{Future work}
 
@@ -74,8 +80,8 @@ On the synthetic-generation side, it would be useful to treat the threshold mult
 volatility window as parameters to test, instead of fixed constants. The generator should also be
 compared with other synthetic-data methods, such as block bootstrapping of historical returns.
 
-Finally, the optimizer should be parallelized before this method is scaled further. At the moment, the
-synthetic workflow is computationally expensive because every grid point requires many backtests. Given
-that its OOS deterioration was not more predictable than the benchmark workflow in these experiments,
-the extra computation is not clearly justified yet. Parallelization would make wider grids and more
-synthetic paths practical, reducing noise without making the runtime excessive.
+Finally, the optimizer should be parallelized before this method is scaled further. At the moment, a
+synthetic optimization with 50 paths runs 50 backtests for each parameter combination. Given that its
+OOS deterioration was not more predictable than the benchmark workflow in these experiments, the extra
+computation is not clearly justified yet. Parallelization would make wider grids and more synthetic
+paths practical, reducing noise without making the runtime excessive.

@@ -22,6 +22,7 @@
 \usepackage{float}
 \usepackage{amsmath}
 \usepackage{hyperref}
+\renewcommand{\bibname}{References}
 
 % Cleaner hyperlinks.
 \hypersetup{
@@ -32,7 +33,7 @@
 }
 
 % Thesis metadata.
-\newcommand{\ThesisTitle}{Backtesting and Synthetic Market Evaluation of Trading Strategies}
+\newcommand{\ThesisTitle}{Strategy Optimization via Synthetic Market Generation}
 \newcommand{\AuthorName}{Jacopo Michelacci}
 \newcommand{\SupervisorName}{Prof. Giovanni Cardillo}
 \newcommand{\DegreeProgramme}{Bachelor's Degree in Management and Economics}
@@ -106,7 +107,35 @@
 \chapter{Conclusion}
 \input{chapters/07_conclusion}
 
-\chapter*{References}
+\chapter*{Code Availability}
+\addcontentsline{toc}{chapter}{Code Availability}
+
+All code used for this thesis was developed independently by the author and is publicly available at:
+\url{https://github.com/JacopoMichelacci/100_OOS_BSc_Thesis}.
+
+The thesis focuses on the research design, optimization procedure, synthetic market generation, and
+empirical results. For this reason, implementation details are discussed only when they are necessary
+to understand the methodology. The full source code is provided in the repository for reproducibility
+and further inspection.
+
+\begin{thebibliography}{9}
 \addcontentsline{toc}{chapter}{References}
+
+\bibitem{politis1994}
+Politis, D. N., and Romano, J. P. (1994).
+The stationary bootstrap.
+\textit{Journal of the American Statistical Association}, 89(428), 1303--1313.
+
+\bibitem{white2000}
+White, H. (2000).
+A reality check for data snooping.
+\textit{Econometrica}, 68(5), 1097--1126.
+
+\bibitem{bailey2017}
+Bailey, D. H., Borwein, J. M., L\'opez de Prado, M., and Zhu, Q. J. (2017).
+The probability of backtest overfitting.
+\textit{Journal of Computational Finance}, 20(4), 39--69.
+
+\end{thebibliography}
 
 \end{document}
