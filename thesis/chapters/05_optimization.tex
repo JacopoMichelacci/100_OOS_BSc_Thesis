@@ -2,6 +2,9 @@
 
 Each strategy is optimized in stages. The stop-loss percentage is usually optimized first. All parameters that
 are not optimized are kept fixed, either at their resting values or at values selected in previous stages.
+Parameter selection is based on robust grid regions rather than isolated metric peaks, because selecting
+the single best point after testing many alternatives is exactly the type of data-snooping problem
+discussed by \citet{white2000}.
 
 The historical grids are evaluated directly on the real historical IS period. The synthetic grids are
 evaluated on 50 synthetic paths generated from the same IS period, using the threshold-constrained

@@ -33,9 +33,12 @@ execution is handled by the backtester at the open-lot level.
 
 \section{Moving-average crossover strategy}
 
-The moving-average crossover strategy is a trend-following rule. It compares a fast moving average
-with a slow moving average. The fast average reacts more quickly to recent price changes, while the
-slow average represents a smoother estimate of the price trend.
+The moving-average crossover strategy is a trend-following rule. Moving-average rules are a standard
+example of technical trading rules in empirical finance. \citet{brock1992} test moving-average and
+trading-range-break rules on the Dow Jones Industrial Average and show that such simple rules have
+been widely used as empirical tests of market predictability. The strategy used here compares a fast
+moving average with a slow moving average. The fast average reacts more quickly to recent price
+changes, while the slow average represents a smoother estimate of the price trend.
 
 Let \(MA_f(t)\) be the fast moving average at time \(t\), and \(MA_s(t)\) be the slow moving
 average. A long signal is generated when the fast moving average crosses above the slow moving

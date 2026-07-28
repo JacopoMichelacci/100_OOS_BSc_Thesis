@@ -1,18 +1,25 @@
 \section{The overfitting problem}
 
+Overfitting can take different forms. In this thesis, the term refers specifically to
+optimization-induced overfitting in trading strategy backtests. This is the risk that a strategy
+appears strong because its parameters were selected to match noise or path-specific patterns in the
+IS period, rather than because the strategy captures a stable market effect. \citet{white2000}
+formalizes this data-snooping problem: when many alternatives are tested on the same sample, strong
+historical performance can arise by chance. \citet{sullivan1999} apply this problem directly to
+technical trading rule performance, while \citet{bailey2017} study the same issue in the specific
+context of backtest overfitting.
+
 A naive approach to strategy development would be to optimize a strategy on the full available
 historical dataset and then deploy the best-performing configuration. This is problematic because
 the same data is used both to choose the parameters and to judge the quality of the strategy. If
 many parameter combinations are tested, some of them are likely to look good by chance, even if the
-underlying rule has little predictive value. The more parameter combinations and strategy variations
-are tested, the greater the probability of finding a configuration that performed well on the
-historical sample by chance rather than because of a robust underlying effect. Such a configuration
-may produce an impressive backtest, but fail when applied to new market data.
+underlying rule has little predictive value. Such a configuration may produce an impressive
+backtest, but fail when applied to new market data.
 
-Overfitting can therefore be understood as a loss of generalization. The strategy becomes too
-adapted to the noise, anomalies, and specific sequence of events observed in the historical sample.
-As a consequence, the more a strategy is overfitted, the less likely it is that its backtested
-performance will be repeated in the future.
+In this setting, overfitting can therefore be understood as a loss of generalization caused by
+parameter selection. The strategy becomes too adapted to the noise, anomalies, and specific sequence
+of events observed in the historical sample. As a consequence, the more a strategy is overfitted,
+the less likely it is that its backtested performance will be repeated in the future.
 
 A common response to this issue is to split the historical data into two parts. The first part,
 usually called the in-sample period (IS from now on), is used to develop and optimize the strategy.
@@ -33,6 +40,11 @@ This thesis proposes an alternative optimization input. Instead of optimizing on
 historical IS path, the IS period is used to generate several synthetic market paths. The strategy is
 then optimized using average performance across those paths. The purpose is to test whether this can
 reduce the loss of generalization created by overfitting.
+
+\citet{bailey2017} address a related but different part of the problem. Their approach estimates the
+probability that a selected backtest is overfit after many alternatives have been tested. This thesis
+does not try to estimate that probability directly. Instead, it tests whether changing the
+optimization input can lead to parameter choices with smaller IS/OOS deterioration.
 
 This idea is not usually the first approach in strategy optimization. A common objection is that
 synthetic random walks may add too much noise and remove too much of the original market structure.
@@ -64,9 +76,17 @@ component handles the computationally intensive parts of the workflow, including
 strategy simulation, trade reconstruction, and grid-based optimization. Python is used for report
 generation and plotting.
 
-The framework makes it possible to compare the two optimization approaches directly. In both cases,
-the same strategy, data split, performance metrics, and out-of-sample test period are used. The only
-difference is where the optimization results come from: in the benchmark case, they come from the
-historical in-sample data; in the alternative case, they come from multiple synthetic paths
-generated from that same in-sample data. The main comparison is therefore the IS-OOS performance gap
-produced by each method.
+The framework is built to compare the proposed method against a clear benchmark. The benchmark is the
+standard historical IS/OOS workflow: parameters are selected on the real IS period and evaluated on
+the real OOS period. The proposed method keeps the same OOS evaluation, but changes the optimization
+input: parameters are selected using the mean result across synthetic IS paths. In both cases, the
+same strategy, data split, performance metrics, and OOS test period are used. The main comparison is
+therefore the IS-OOS performance gap produced by each method.
+
+The practical relevance of this comparison is capital allocation. An asset manager does not only need
+a strategy that performs well in a backtest; they need evidence that the selected parameters are not
+mainly the result of fitting noise in one historical sample. A method that reduces the IS-OOS
+performance gap would make strategy selection more reliable before capital is allocated. Conversely,
+if the synthetic workflow does not reduce this gap, this is also useful information, because it shows
+that the additional computational cost is not justified by better OOS robustness in the tested
+setting.

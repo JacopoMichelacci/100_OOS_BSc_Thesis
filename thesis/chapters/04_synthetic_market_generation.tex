@@ -7,6 +7,10 @@ parameters may fit details that are specific to that sample and may not repeat i
 
 Synthetic markets are used to create alternative price paths that preserve some basic statistical
 properties of the original data, while still producing different possible market evolutions.
+\citet{politis1994} introduce the stationary bootstrap as a way to resample dependent time
+series. The synthetic paths used here are not a direct implementation of that bootstrap, but they
+serve a similar purpose: creating alternative market paths without treating the observations as
+independent.
 
 In the thesis workflow, synthetic paths are generated from the historical IS data. The strategy is
 then optimized across those paths, using average performance across simulations instead of
@@ -36,6 +40,8 @@ The generator currently implements three methods:
 In the synthetic path comparison shown in this chapter, each generator produces 50 paths. The
 rolling methods use a 30-bar window for volatility estimation. The threshold-constrained version
 uses the same 30-bar volatility window and a threshold multiplier of \(k = 10\).
+The first two generators are included for comparison; the empirical optimization and results use
+only the threshold-constrained version.
 
 In the figures, the red line represents the original historical market path, while the gray lines
 represent the generated synthetic paths.
@@ -159,6 +165,7 @@ can produce synthetic data that is easier to compare with the historical IS samp
 The threshold-constrained version is the most useful for this thesis. It keeps randomness, but
 remains linked to the original market by construction. The generated paths are therefore alternative
 versions of the same broad market environment, rather than unrelated price histories.
+For this reason, only this third generator is used in the optimization and results chapters.
 
 \section{Synthetic high and low construction}
 
