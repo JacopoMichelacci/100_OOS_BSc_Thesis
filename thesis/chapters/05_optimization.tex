@@ -20,7 +20,7 @@ trades per year.
 \subsection{Stop-loss stage}
 
 The stop-loss percentage was optimized first, holding the rest of the parameters at their
-resting values (\(fast\_len = 50\), \(slow\_len = 100\)). Figure~\ref{fig:mac-slpct} compares the
+resting values (\(\texttt{fast\_len} = 50\), \(\texttt{slow\_len} = 100\)). Figure~\ref{fig:mac-slpct} compares the
 historical-IS sweep with the synthetic-path mean.
 
 \begin{figure}[H]
@@ -39,7 +39,7 @@ historical-IS sweep with the synthetic-path mean.
 The synthetic plot has a similar shape to the historical one, but it is smoother. This is expected,
 since every point is averaged across 50 paths instead of being measured on one path only.
 
-The stop-loss was left disabled (\(slpct = -1\)) for both the benchmark and the synthetic configuration
+The stop-loss was left disabled (\(\texttt{slpct} = -1\)) for both the benchmark and the synthetic configuration
 because short stop-loss values produced unstable results.
 
 \subsection{Fast/slow length stage}
@@ -101,7 +101,7 @@ configuration, I kept the same slow length but chose a shorter fast length:
 
 As with the crossover strategy, the stop-loss percentage was optimized first, holding the
 standard-deviation length and thresholds at their resting values (\(std\_len = 15\),
-\(lower\_std\_thresh = -1.5\), \(upper\_std\_thresh = 1.5\)). Figure~\ref{fig:mrev-slpct} sweeps the
+\(\texttt{lower\_std\_thresh} = -1.5\), \(\texttt{upper\_std\_thresh} = 1.5\)). Figure~\ref{fig:mrev-slpct} sweeps the
 stop-loss percentage from 0\% to 60\% on the real historical IS period.
 
 \begin{figure}[H]
@@ -115,7 +115,7 @@ For this strategy, the stop-loss curve has a clearer structure. Net profit and S
 stop-loss values, around 1\%--3\%, then deteriorate and eventually flatten once the stop is so wide that
 it rarely triggers. That flat region is stable, but it is not useful: a mean-reversion trade should be
 cut when the move keeps going against it. For this reason, the benchmark stop-loss was selected from the
-early profitable region, giving \(slpct = 2.5\%\). This is a risk-control choice, not a pure
+early profitable region, giving \(\texttt{slpct} = 2.5\%\). This is a risk-control choice, not a pure
 maximum-metric choice.
 
 The same sweep was repeated on synthetic paths, holding the same resting values.
@@ -142,9 +142,9 @@ Figures~\ref{fig:mrev-syn-slpct-np}--\ref{fig:mrev-syn-slpct-sharpe} report the 
 \end{figure}
 
 Averaging over synthetic paths removes most of the noise. The curve rises near the 1\% area and then
-decays toward the same inactive-stop plateau. The best single point, \(slpct = 0.1\%\), is too isolated
+decays toward the same inactive-stop plateau. The best single point, \(\texttt{slpct} = 0.1\%\), is too isolated
 to use directly. Using the same risk-control logic as above, the synthetic configuration uses
-\(slpct = 2.0\%\).
+\(\texttt{slpct} = 2.0\%\).
 
 \subsection{Length and linked threshold stage}
 
@@ -246,7 +246,7 @@ then evaluated on the real OOS period in the following chapter.
     \centering
     \begin{tabular}{lllll}
         \toprule
-        Strategy & Method & Parameters & slpct & Other \\
+        Strategy & Method & Parameters & \texttt{slpct} & Other \\
         \midrule
         MA Cross & Benchmark & fast=50, slow=200 & disabled & -- \\
         MA Cross & Synthetic & fast=35, slow=200 & disabled & -- \\

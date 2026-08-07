@@ -1,27 +1,21 @@
-This thesis studies the problem of robust strategy optimization in systematic trading. The central
-question is how trading strategies can be optimized on past market data while limiting the risk of
-overfitting, but more specifically, which optimization procedure produces more reliable
-out-of-sample performance.
+This thesis studies robust strategy optimization in systematic trading. The main question is how
+trading strategies can be optimized on past market data while limiting optimization-induced
+overfitting, defined as the risk that selected parameters fit noise or path-specific patterns in the
+in-sample period rather than a stable market effect.
 
-To address this question, the project develops an efficient research framework composed of a C++
-backtesting and optimization engine linked to Python reporting and analysis tools. The C++ component
-is responsible for data processing, strategy simulation, trade reconstruction, and grid-based
-parameter optimization. The Python component is used for plotting, report generation, and
-performance analysis. This separation allows the computationally intensive parts of the workflow to
-remain efficient and independent, while keeping the analytical layer flexible.
+The project develops a C++ and Python research framework for backtesting, parameter optimization,
+trade reconstruction, synthetic market generation, and report generation. The C++ component handles
+simulation and optimization, while Python is used for plotting and performance analysis.
 
-The empirical analysis uses the same discretionary optimization procedure under two different
-data-generation settings. The benchmark approach optimizes the strategy on the historical in-sample
-period, defined as the first 70\% of the original series. The alternative approach optimizes the
-strategy on synthetic markets generated from the same in-sample window: multiple synthetic paths are
-produced, the strategy is evaluated across them, and parameter selection is based on average
-performance rather than on a single historical path. In both cases, parameter selection is performed
-using discretion, following basic robustness principles rather than blindly selecting the single
-best result. The selected parameters are then frozen and tested on the same out-of-sample period,
-corresponding to the final 30\% of the original historical series. The comparison focuses on the gap
-between optimization performance and out-of-sample performance: a smaller deterioration is
-interpreted as evidence of lower overfitting.
+The empirical analysis compares two optimization workflows. The benchmark uses the standard IS/OOS
+approach: parameters are selected on the historical in-sample period, defined as the first 70\% of the
+original series, and then tested on the final 30\% OOS period. The alternative workflow uses the same
+OOS test, but changes the optimization input. Instead of optimizing on one historical IS path, it
+generates multiple synthetic market paths from the IS period and selects parameters using average
+performance across those paths.
 
-The results do not show a clear reduction in overfitting from the synthetic optimization method. The
-synthetic paths are useful as alternative market scenarios, but in these experiments they do not lead
-to parameters that generalize better than the standard IS/OOS benchmark.
+The comparison focuses on the deterioration from optimization performance to OOS performance. A
+smaller IS/OOS performance gap is interpreted as evidence of lower overfitting. In the experiments,
+the synthetic optimization method does not show a clear reduction in overfitting compared with the
+standard IS/OOS benchmark. The synthetic paths are useful as alternative market scenarios, but they do
+not lead to parameters that generalize better in the tested setting.

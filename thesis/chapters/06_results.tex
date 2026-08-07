@@ -6,7 +6,7 @@ and the synthetic workflow, optimized on synthetic IS paths. For MA Cross, an ad
 table is also shown to compare the real IS result with the synthetic-mean IS result using the same
 parameters.
 
-In all tables, \(Diff = OOS - IS\). This is the most important row, because it measures the change from
+In all tables, \(\text{Diff} = \text{OOS} - \text{IS}\). This is the most important row, because it measures the change from
 backtested performance to OOS performance. For net profit, Sharpe, and average profit, a negative value
 means that OOS performance was worse than IS performance. For max DD, a negative value means that
 drawdown became larger OOS. The key comparison is between the standard workflow and the synthetic
@@ -82,7 +82,7 @@ still worse. For this strategy, the synthetic workflow does not improve the fina
         \textbf{Diff} & \textbf{174.52} & \textbf{-0.15} & \textbf{0.10} & \textbf{0.20} & \textbf{-5.01} \\
         \bottomrule
     \end{tabular}
-    \caption{Std MRev, standard workflow (std\_len=20, upper=1.0, lower=-0.35, slpct=2.5\%).}
+    \caption{Std MRev, standard workflow (\texttt{std\_len}=20, upper=1.0, lower=-0.35, \texttt{slpct}=2.5\%).}
     \label{tab:mrev-standard}
 \end{table}
 
@@ -97,7 +97,7 @@ still worse. For this strategy, the synthetic workflow does not improve the fina
         \textbf{Diff}          & \textbf{1202.40} & \textbf{-0.79} & \textbf{-0.14} & \textbf{2.24} & \textbf{-10.39} \\
         \bottomrule
     \end{tabular}
-    \caption{Std MRev, synthetic workflow (std\_len=150, upper=3.0, lower=-0.30, slpct=2.0\%).}
+    \caption{Std MRev, synthetic workflow (\texttt{std\_len}=150, upper=3.0, lower=-0.30, \texttt{slpct}=2.0\%).}
     \label{tab:mrev-synthetic}
 \end{table}
 
